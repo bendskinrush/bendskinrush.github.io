@@ -67,10 +67,10 @@
   const GRAPHICS_QUALITIES = ['low', 'normal', 'high', 'ultra'];
 
   const GRAPHICS_DESCRIPTIONS = {
-    low: 'Low 2D active: flat high-contrast 2D shapes, minimal shadows & particles for peak FPS on older phones.',
-    normal: 'Normal quality: classic 2.5D shaded vehicles and smooth road lighting with balanced battery use.',
-    high: 'High 3D active: perspective-extruded 3D vehicles, raised curbs & buildings, headbeams, mirrors & crisp 2x sharpness.',
-    ultra: 'Ultra HD 3D Engine: true real-time WebGL 3D world with articulated rider hands & armored gloves, sunlit shadows, textures & realistic traffic.',
+    low: 'Low quality active: classic 2.5D shaded vehicles and smooth road lighting with balanced battery use.',
+    normal: 'Normal quality active: perspective-extruded 3D vehicles, raised curbs & buildings, headbeams & mirrors.',
+    high: 'High HD 3D Engine: real-time Three.js WebGL 3D highway, detailed traffic, shadows & full armored gloves.',
+    ultra: 'Ultra HD 720p+ Engine: crisp 720p+ supersampled 3D cockpit, visible rider fingers & twin digital/analog dashboard.',
   };
 
   // Uniform metadata table: stationary hazards stay at speedKmh: 0 (world-locked),
@@ -176,7 +176,6 @@
   };
 
   const HAZARD_TYPES = [
-    'pothole',
     'barrier',
     'timber_log',
     'yellow_taxi',
@@ -198,6 +197,10 @@
   const STORAGE_LEADERBOARD_KEY = 'bendskin_rush_leaderboard_v2_real';
   const STORAGE_SETTINGS_KEY = 'bendskin_rush_settings_v2';
   const STORAGE_COINS_KEY = 'bendskin_rush_coins_v1';
+  const STORAGE_COINS_MAP_KEY = 'bendskin_rush_coins_by_account_v2';
+  const STORAGE_BEST_MAP_KEY = 'bendskin_rush_best_by_account_v2';
+  const STORAGE_GUEST_ID_KEY = 'bendskin_rush_guest_id_v2';
+  const STORAGE_MIGRATED_V2_KEY = 'bendskin_rush_account_isolation_v2';
   const ADSENSE_BACKGROUND_PUB_ID = 'ca-pub-4032050439057511';
 
   const API_ORIGIN =
@@ -211,6 +214,7 @@
     leaderboard: `${API_ORIGIN}/api/leaderboard`,
     signup: `${API_ORIGIN}/api/auth/signup`,
     login: `${API_ORIGIN}/api/auth/login`,
+    coins: `${API_ORIGIN}/api/account/coins`,
   };
 
   const CAMEROON_CITIES = [
@@ -284,6 +288,7 @@
   const hudComboBadgeEl = document.getElementById('hud-combo-badge');
   const hudComboTextEl = document.getElementById('hud-combo-text');
   const hudComboFillEl = document.getElementById('hud-combo-fill');
+  const hudPedalsEl = document.getElementById('hud-pedals');
   const hudSteerClusterEl = document.getElementById('hud-steer-cluster');
   const btnSteerLeft = document.getElementById('btn-steer-left');
   const btnSteerRight = document.getElementById('btn-steer-right');
@@ -317,6 +322,10 @@
   const garageModal = document.getElementById('garage-modal');
   const btnCloseGarage = document.getElementById('btn-close-garage');
   const garageCoinBalanceEl = document.getElementById('garage-coin-balance');
+  const garageBikeCanvas = document.getElementById('garage-bike-canvas');
+  const garagePreviewName = document.getElementById('garage-preview-name');
+  const garagePreviewSpecs = document.getElementById('garage-preview-specs');
+  const garageBikeCards = document.querySelectorAll('.garage-bike-card');
 
   const accountModal = document.getElementById('account-modal');
   const btnCloseAccount = document.getElementById('btn-close-account');
@@ -378,6 +387,9 @@
   const btnModeAuto = document.getElementById('btn-mode-auto');
   const btnModeManual = document.getElementById('btn-mode-manual');
   const driveModeDesc = document.getElementById('drive-mode-desc');
+  const btnHandRight = document.getElementById('btn-hand-right');
+  const btnHandLeft = document.getElementById('btn-hand-left');
+  const handLayoutDesc = document.getElementById('hand-layout-desc');
   const btnTiltToggle = document.getElementById('btn-tilt-toggle');
   const btnTiltCalibrate = document.getElementById('btn-tilt-calibrate');
   const tiltStatusBadge = document.getElementById('tilt-status-badge');
@@ -1071,8 +1083,9 @@
             username: nickCheck.nickname,
             password: cleanPass,
             city: locCheck.location,
-            playerId: playerId || generatePlayerId(),
+            playerId: generatePlayerId(),
             highScore: Math.max(0, Math.floor(Number(highScore) || 0)),
+            coins: 0,
           }),
         });
         const data = await res.json().catch(() => null);
@@ -1085,7 +1098,12 @@
         if (Array.isArray(data.entries)) {
           saveBoard(data.entries);
         }
-        return { ok: true, profile: data.profile };
+        return {
+          ok: true,
+          profile: data.profile,
+          highScore: Number(data.highScore || 0),
+          coins: Number(data.coins || 0),
+        };
       } catch {
         return {
           ok: false,
@@ -1123,12 +1141,36 @@
         if (Array.isArray(data.entries)) {
           saveBoard(data.entries);
         }
-        return { ok: true, profile: data.profile, highScore: Number(data.highScore || 0) };
+        return {
+          ok: true,
+          profile: data.profile,
+          highScore: Number(data.highScore || 0),
+          coins: Number(data.coins || 0),
+        };
       } catch {
         return {
           ok: false,
           error: 'Network offline — cannot log in without internet.',
         };
+      }
+    }
+
+    async function syncAccountCoins(profileObj, coinsValue) {
+      if (!profileObj || profileObj.accountType !== 'registered' || !profileObj.nickname || !profileObj.playerId) {
+        return;
+      }
+      try {
+        await fetch(API_ENDPOINTS.coins, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            username: profileObj.nickname,
+            playerId: profileObj.playerId,
+            coins: Math.max(0, Math.floor(Number(coinsValue) || 0)),
+          }),
+        });
+      } catch {
+        // Offline tolerance; per-account map still preserves balance locally
       }
     }
 
@@ -1285,11 +1327,41 @@
       syncFromCloud,
       registerAccount,
       loginAccount,
+      syncAccountCoins,
+      generatePlayerId,
     };
   }
 
   const leaderboardService = createLeaderboardService();
   let playerProfile = leaderboardService.loadProfile();
+
+  function getOrCreateGuestPlayerId() {
+    try {
+      if (playerProfile && playerProfile.accountType !== 'registered' && playerProfile.playerId) {
+        localStorage.setItem(STORAGE_GUEST_ID_KEY, playerProfile.playerId);
+        return playerProfile.playerId;
+      }
+      const saved = localStorage.getItem(STORAGE_GUEST_ID_KEY);
+      if (saved && /^[A-Za-z0-9_-]{6,32}$/.test(saved)) {
+        return saved;
+      }
+      const nextId = `gst_${leaderboardService.generatePlayerId().replace(/^u_/, '')}`;
+      localStorage.setItem(STORAGE_GUEST_ID_KEY, nextId);
+      return nextId;
+    } catch {
+      return `gst_${leaderboardService.generatePlayerId().replace(/^u_/, '')}`;
+    }
+  }
+
+  if (playerProfile && playerProfile.accountType !== 'registered' && playerProfile.playerId) {
+    try {
+      if (!localStorage.getItem(STORAGE_GUEST_ID_KEY)) {
+        localStorage.setItem(STORAGE_GUEST_ID_KEY, playerProfile.playerId);
+      }
+    } catch {
+      // Ignore storage error
+    }
+  }
 
   // Expose validation & leaderboard helpers for inspection/anti-cheat verification
   window.BendskinLeaderboard = {
@@ -1306,6 +1378,7 @@
   // =========================================================
   const DEFAULT_SETTINGS = {
     driveMode: 'auto', // 'auto' | 'manual'
+    controlHandedness: 'right', // 'right' (arrows L, pedals R) | 'left' (pedals L, arrows R)
     sensitivity: 1.0,  // 0.5 .. 2.0
     soundMuted: false,
     graphicsQuality: 'ultra', // 'low' | 'normal' | 'high' | 'ultra'
@@ -1332,6 +1405,7 @@
             : 'ultra';
           return {
             driveMode: parsed.driveMode === 'manual' ? 'manual' : 'auto',
+            controlHandedness: parsed.controlHandedness === 'left' ? 'left' : 'right',
             sensitivity: Number.isFinite(sens) ? Math.max(0.5, Math.min(2.0, sens)) : 1.0,
             soundMuted: Boolean(parsed.soundMuted),
             graphicsQuality: qual,
@@ -1394,22 +1468,72 @@
     });
   }
 
-  function loadCoinBank() {
+  function readPerAccountMap(storageKey) {
     try {
-      const saved = localStorage.getItem(STORAGE_COINS_KEY);
-      const parsed = saved ? parseInt(saved, 10) : 0;
-      return Number.isFinite(parsed) && parsed > 0 ? parsed : 0;
+      const raw = localStorage.getItem(storageKey);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+          return parsed;
+        }
+      }
     } catch {
-      return 0;
+      // Ignore parse errors
     }
+    return {};
   }
 
-  function saveCoinBank(value) {
+  function writePerAccountMap(storageKey, mapObj) {
     try {
-      localStorage.setItem(STORAGE_COINS_KEY, String(Math.max(0, Math.floor(value))));
+      localStorage.setItem(storageKey, JSON.stringify(mapObj));
     } catch {
       // Ignore storage errors
     }
+  }
+
+  function migrateLegacyScalarsOnce() {
+    try {
+      if (localStorage.getItem(STORAGE_MIGRATED_V2_KEY)) return;
+      localStorage.setItem(STORAGE_MIGRATED_V2_KEY, '1');
+      const pid = (playerProfile && playerProfile.playerId) || '';
+      if (!pid) return;
+      const legacyCoins = parseInt(localStorage.getItem(STORAGE_COINS_KEY) || '0', 10);
+      if (Number.isFinite(legacyCoins) && legacyCoins > 0) {
+        const coinsMap = readPerAccountMap(STORAGE_COINS_MAP_KEY);
+        if (typeof coinsMap[pid] !== 'number') {
+          coinsMap[pid] = legacyCoins;
+          writePerAccountMap(STORAGE_COINS_MAP_KEY, coinsMap);
+        }
+      }
+      const legacyBest = parseInt(localStorage.getItem(STORAGE_BEST_KEY) || '0', 10);
+      if (Number.isFinite(legacyBest) && legacyBest > 0) {
+        const bestMap = readPerAccountMap(STORAGE_BEST_MAP_KEY);
+        if (typeof bestMap[pid] !== 'number') {
+          bestMap[pid] = legacyBest;
+          writePerAccountMap(STORAGE_BEST_MAP_KEY, bestMap);
+        }
+      }
+    } catch {
+      // Ignore migration errors
+    }
+  }
+  migrateLegacyScalarsOnce();
+
+  function loadCoinBank(accountId = playerProfile && playerProfile.playerId) {
+    const pid = String(accountId || '').trim();
+    if (!pid) return 0;
+    const coinsMap = readPerAccountMap(STORAGE_COINS_MAP_KEY);
+    const val = Number(coinsMap[pid]);
+    return Number.isFinite(val) && val > 0 ? Math.floor(val) : 0;
+  }
+
+  function saveCoinBank(value, accountId = playerProfile && playerProfile.playerId) {
+    const pid = String(accountId || '').trim();
+    if (!pid) return;
+    const cleanVal = Math.max(0, Math.floor(Number(value) || 0));
+    const coinsMap = readPerAccountMap(STORAGE_COINS_MAP_KEY);
+    coinsMap[pid] = cleanVal;
+    writePerAccountMap(STORAGE_COINS_MAP_KEY, coinsMap);
   }
 
   let currentState = GAME_STATE.START;
@@ -1420,8 +1544,8 @@
   let menuCameraZ = 0;
   let speedKmh = SPEED_CURVE.LAUNCH_KMH;
   let distanceMeters = 0;
-  let bestMeters = loadBestScore();
-  let savedCoinBank = loadCoinBank();
+  let bestMeters = loadBestScore(playerProfile && playerProfile.playerId);
+  let savedCoinBank = loadCoinBank(playerProfile && playerProfile.playerId);
   let runCoins = 0;
   let targetBestLineMeters = bestMeters;
   let passedBestThisRun = false;
@@ -1519,6 +1643,11 @@
       saveSettings(userSettings);
       applySettingsUi();
     },
+    setControlHandedness: (hand) => {
+      userSettings.controlHandedness = hand === 'left' ? 'left' : 'right';
+      saveSettings(userSettings);
+      applySettingsUi();
+    },
     setSensitivity: (val) => {
       const n = Number(val);
       if (Number.isFinite(n)) {
@@ -1555,47 +1684,50 @@
   };
 
   // =========================================================
-  // 5b. Persistence & Resize
+  // 5b. Persistence & 720p+ Crisp Resize
   // =========================================================
-  function loadBestScore() {
-    try {
-      const saved = localStorage.getItem(STORAGE_BEST_KEY);
-      const parsed = saved ? parseInt(saved, 10) : 0;
-      return Number.isFinite(parsed) && parsed > 0 ? parsed : 0;
-    } catch {
-      return 0;
-    }
+  function loadBestScore(accountId = playerProfile && playerProfile.playerId) {
+    const pid = String(accountId || '').trim();
+    if (!pid) return 0;
+    const bestMap = readPerAccountMap(STORAGE_BEST_MAP_KEY);
+    const val = Number(bestMap[pid]);
+    return Number.isFinite(val) && val > 0 ? Math.floor(val) : 0;
   }
 
-  function saveBestScore(value) {
-    try {
-      localStorage.setItem(STORAGE_BEST_KEY, String(Math.floor(value)));
-    } catch {
-      // Ignore storage errors in private browsing modes
-    }
+  function saveBestScore(value, accountId = playerProfile && playerProfile.playerId) {
+    const pid = String(accountId || '').trim();
+    if (!pid) return;
+    const cleanVal = Math.max(0, Math.floor(Number(value) || 0));
+    const bestMap = readPerAccountMap(STORAGE_BEST_MAP_KEY);
+    bestMap[pid] = cleanVal;
+    writePerAccountMap(STORAGE_BEST_MAP_KEY, bestMap);
   }
 
-  function getQualityDprCap() {
+  function getQualityDprCap(cssWidth, cssHeight) {
+    const shortSide = Math.min(Math.max(1, cssWidth || 400), Math.max(1, cssHeight || 720));
     switch (userSettings.graphicsQuality) {
       case 'low':
-        return 1;
-      case 'normal':
         return 1.5;
+      case 'normal':
+        return 2.0;
       case 'high':
-        return 2;
-      default:
-        return 3;
+        return 2.0;
+      default: {
+        const minScale720p = 720 / shortSide;
+        return Math.min(3.0, Math.max(2.0, minScale720p));
+      }
     }
   }
 
   function syncUltra3DMode(cssWidth, cssHeight) {
-    const wantsUltra = userSettings.graphicsQuality === 'ultra';
+    const wants3D =
+      userSettings.graphicsQuality === 'high' || userSettings.graphicsQuality === 'ultra';
     const engine = window.BendskinUltra3D;
     let ready = false;
-    if (wantsUltra && canvas3d && engine && engine.isSupported()) {
+    if (wants3D && canvas3d && engine && engine.isSupported()) {
       ready = engine.init(canvas3d);
       if (ready && typeof cssWidth === 'number' && typeof cssHeight === 'number') {
-        engine.resize(cssWidth, cssHeight);
+        engine.resize(cssWidth, cssHeight, userSettings.graphicsQuality);
       }
     }
     ultra3DEnabled = ready;
@@ -1608,7 +1740,11 @@
     const rect = appContainer.getBoundingClientRect();
     const cssWidth = Math.max(1, rect.width);
     const cssHeight = Math.max(1, rect.height);
-    const dpr = Math.min(window.devicePixelRatio || 1, getQualityDprCap());
+    const dprCap = getQualityDprCap(cssWidth, cssHeight);
+    const dpr =
+      userSettings.graphicsQuality === 'ultra'
+        ? Math.min(3.0, Math.max(window.devicePixelRatio || 1, dprCap))
+        : Math.min(window.devicePixelRatio || 1, dprCap);
 
     canvas.width = Math.round(cssWidth * dpr);
     canvas.height = Math.round(cssHeight * dpr);
@@ -1877,24 +2013,42 @@
     return occupied;
   }
 
-  function tryYieldVehicleLane(entity) {
+  function beginVehicleLaneChange(entity, nextLane, leadSeconds = 0.72, isHornYield = false) {
     if (!entity || ENTITY_CONFIG[entity.type].speedKmh <= 0) return false;
+    if (typeof entity.pendingLane === 'number' || nextLane === entity.lane) return false;
+    if (nextLane < 0 || nextLane > 2) return false;
+    if (typeof entity.visualLane !== 'number') {
+      entity.visualLane = entity.lane;
+    }
+    // Never cut across into the player's lane at high speed when close
+    const distAhead = entity.worldZ - playerZ;
+    if (!isHornYield && distAhead > -2 && distAhead < 28 && Math.abs(nextLane - targetLane) < 0.75) {
+      return false;
+    }
+    entity.pendingLane = nextLane;
+    entity.signalDir = nextLane < entity.lane ? -1 : 1;
+    entity.signalTimer = Math.max(0.32, leadSeconds);
+    entity.yielding = isHornYield;
+    return true;
+  }
+
+  function tryYieldVehicleLane(entity, isHornYield = false) {
+    if (!entity || ENTITY_CONFIG[entity.type].speedKmh <= 0) return false;
+    if (typeof entity.pendingLane === 'number' && !isHornYield) return true;
+    const distAhead = entity.worldZ - playerZ;
     const candidates = [entity.lane - 1, entity.lane + 1].filter(
       (laneIdx) =>
         isLaneClearForVehicle(laneIdx, entity.worldZ, entity, 18) &&
-        getOccupiedOtherLanesSet(laneIdx, entity.worldZ, entity, 17).size < 2
+        getOccupiedOtherLanesSet(laneIdx, entity.worldZ, entity, 17).size < 2 &&
+        (isHornYield || distAhead >= 28 || Math.abs(laneIdx - targetLane) >= 0.75)
     );
     if (candidates.length === 0) return false;
 
     // Prefer moving away from the player's current lane
     candidates.sort((a, b) => Math.abs(b - currentLane) - Math.abs(a - currentLane));
     const nextLane = candidates[0];
-    if (typeof entity.visualLane !== 'number') {
-      entity.visualLane = entity.lane;
-    }
-    entity.lane = nextLane;
-    entity.yielding = true;
-    return true;
+    // Flash turn signal before shifting lanes (0.36s when clearing for horn, 0.72s otherwise)
+    return beginVehicleLaneChange(entity, nextLane, isHornYield ? 0.36 : 0.72, isHornYield);
   }
 
   function clearTrafficAheadWithHorn(showPopup) {
@@ -1907,7 +2061,7 @@
       const distAhead = entity.worldZ - playerZ;
       const entityLane = typeof entity.visualLane === 'number' ? entity.visualLane : entity.lane;
       if (distAhead > 2 && distAhead < 78 && Math.abs(entityLane - currentLane) < 0.85) {
-        if (tryYieldVehicleLane(entity)) {
+        if (tryYieldVehicleLane(entity, true)) {
           clearedCount += 1;
         }
       }
@@ -2332,7 +2486,7 @@
     }
   }
 
-  const STATIONARY_HAZARDS = ['pothole', 'barrier', 'timber_log'];
+  const STATIONARY_HAZARDS = ['barrier', 'timber_log'];
   const MOVING_HAZARDS = ['yellow_taxi', 'timber_truck', 'clando_van', 'rival_moto'];
 
   function pickCollectibleType() {
@@ -2519,7 +2673,11 @@
 
   function applyDriveModeToHud() {
     const isManual = userSettings.driveMode === 'manual';
+    const isLeftHanded = userSettings.controlHandedness === 'left';
     const tiltOn = Boolean(userSettings.tiltSteering);
+    if (hudPedalsEl) {
+      hudPedalsEl.classList.toggle('left-handed', isLeftHanded);
+    }
     if (pedalGasEl) {
       pedalGasEl.classList.toggle('hidden', !isManual);
     }
@@ -2528,9 +2686,10 @@
     }
     if (hudHintPillEl) {
       const steerText = tiltOn ? 'Tilt Phone Smoothly' : '</> Arrows or Swipe';
+      const sideText = isLeftHanded ? 'Pedals L / Arrows R' : 'Arrows L / Pedals R';
       hudHintPillEl.textContent = isManual
-        ? `${steerText} • Hold SPACE Horn • GAS/BRAKE • ESC Pause`
-        : `${steerText} to Steer • Hold SPACE Horn • ESC Pause`;
+        ? `${steerText} • ${sideText} • SPACE Horn • ESC Pause`
+        : `${steerText} to Steer • SPACE Horn • ESC Pause`;
     }
   }
 
@@ -2614,12 +2773,22 @@
 
   function applySettingsUi() {
     const isManual = userSettings.driveMode === 'manual';
+    const isLeftHanded = userSettings.controlHandedness === 'left';
     if (btnModeAuto) btnModeAuto.classList.toggle('active', !isManual);
     if (btnModeManual) btnModeManual.classList.toggle('active', isManual);
     if (driveModeDesc) {
+      const arrowSide = isLeftHanded ? 'right' : 'left';
+      const pedalSide = isLeftHanded ? 'left' : 'right';
       driveModeDesc.textContent = isManual
-        ? 'Manual controls active: hold GAS/BRAKE on the right while steering with Tilt or </> arrows on the left.'
-        : 'Bike accelerates automatically; steer with Tilt, </> arrows or swipe, hold BRAKE to slow down, and hold SPACE for horn.';
+        ? `Manual car pedals active: hold GAS/BRAKE on the ${pedalSide} while steering with Tilt or </> arrows on the ${arrowSide}.`
+        : `Bike accelerates automatically; steer with Tilt or </> arrows (${arrowSide}) and hold BRAKE car pedal (${pedalSide}).`;
+    }
+    if (btnHandRight) btnHandRight.classList.toggle('active', !isLeftHanded);
+    if (btnHandLeft) btnHandLeft.classList.toggle('active', isLeftHanded);
+    if (handLayoutDesc) {
+      handLayoutDesc.textContent = isLeftHanded
+        ? 'Left-Handed layout: Car GAS/BRAKE Pedals & Horn on the Left, < > steering arrows on the Right.'
+        : 'Right-Handed layout: < > steering arrows on the Left, Car GAS/BRAKE Pedals & Horn on the Right.';
     }
     qualityButtons.forEach((btn) => {
       btn.classList.toggle('active', btn.dataset.quality === userSettings.graphicsQuality);
@@ -2629,8 +2798,8 @@
         GRAPHICS_DESCRIPTIONS[userSettings.graphicsQuality] || GRAPHICS_DESCRIPTIONS.ultra;
     }
     if (hudQualityBadgeEl) {
-      const labels = { low: 'LOW 2D', normal: 'NORMAL', high: 'HIGH 3D', ultra: 'ULTRA 3D' };
-      hudQualityBadgeEl.textContent = labels[userSettings.graphicsQuality] || 'ULTRA 3D';
+      const labels = { low: 'LOW', normal: 'NORMAL', high: 'HIGH HD', ultra: 'ULTRA 720p+' };
+      hudQualityBadgeEl.textContent = labels[userSettings.graphicsQuality] || 'ULTRA 720p+';
     }
     const tiltOn = Boolean(userSettings.tiltSteering);
     if (btnHudTilt) {
@@ -2762,6 +2931,9 @@
     if (currentState !== GAME_STATE.PLAYING) return;
     currentState = GAME_STATE.PAUSED;
     stopHorn();
+    if (playerProfile && playerProfile.accountType === 'registered') {
+      leaderboardService.syncAccountCoins(playerProfile, savedCoinBank);
+    }
     sound.updateEngine(0, false);
     keysHeld.throttle = false;
     keysHeld.brake = false;
@@ -2817,6 +2989,9 @@
     closeSettings();
     closeAbout();
     if (garageModal) garageModal.classList.add('hidden');
+    if (window.BendskinUltra3D && typeof window.BendskinUltra3D.stopGaragePreview === 'function') {
+      window.BendskinUltra3D.stopGaragePreview();
+    }
     closeLeaderboard();
     closeAccountModal();
     updateHomeAccountUi();
@@ -3112,6 +3287,51 @@
     showAccountStatus('', false);
   }
 
+  function activateAccountSession(nextProfile, { serverBest = null, serverCoins = null, isFreshAccount = false } = {}) {
+    const prevPid = playerProfile && playerProfile.playerId;
+    if (prevPid) {
+      saveCoinBank(savedCoinBank, prevPid);
+      saveBestScore(bestMeters, prevPid);
+    }
+
+    playerProfile = nextProfile;
+    leaderboardService.saveProfile(playerProfile);
+    if (playerProfile.accountType !== 'registered' && playerProfile.playerId) {
+      try {
+        localStorage.setItem(STORAGE_GUEST_ID_KEY, playerProfile.playerId);
+      } catch {
+        // Ignore storage error
+      }
+    }
+
+    const nextPid = playerProfile.playerId;
+    if (isFreshAccount) {
+      savedCoinBank = 0;
+      bestMeters = 0;
+      runCoins = 0;
+    } else {
+      const localCoins = loadCoinBank(nextPid);
+      const cloudCoins = typeof serverCoins === 'number' && Number.isFinite(serverCoins)
+        ? Math.max(0, Math.floor(serverCoins))
+        : 0;
+      savedCoinBank = Math.max(localCoins, cloudCoins);
+
+      const localBest = loadBestScore(nextPid);
+      const cloudBest = typeof serverBest === 'number' && Number.isFinite(serverBest)
+        ? Math.max(0, Math.floor(serverBest))
+        : 0;
+      bestMeters = Math.max(localBest, cloudBest);
+      runCoins = 0;
+    }
+
+    saveCoinBank(savedCoinBank, nextPid);
+    saveBestScore(bestMeters, nextPid);
+    targetBestLineMeters = bestMeters;
+    syncCoinDisplays();
+    updateHudDisplay();
+    updateHomeAccountUi();
+  }
+
   async function handleAccountSubmit() {
     if (!btnAccountSubmit) return;
     const rawUsername = accountUsername ? accountUsername.value.trim() : '';
@@ -3124,6 +3344,7 @@
         showAccountStatus(locCheck.reason, true);
         return;
       }
+      const guestPid = getOrCreateGuestPlayerId();
       let guestName = '';
       if (rawUsername) {
         const nickCheck = leaderboardService.sanitizeAndValidateNickname(rawUsername);
@@ -3133,15 +3354,19 @@
         }
         guestName = nickCheck.nickname;
       } else {
-        const suffix = (playerProfile.playerId || 'R237').slice(-4).toUpperCase();
+        const suffix = (guestPid || 'R237').slice(-4).toUpperCase();
         guestName = `Guest_${suffix}`;
       }
-      playerProfile.nickname = guestName;
-      playerProfile.city = locCheck.location;
-      playerProfile.accountType = 'guest';
-      playerProfile.configured = true;
-      leaderboardService.saveProfile(playerProfile);
-      updateHomeAccountUi();
+      activateAccountSession(
+        {
+          playerId: guestPid,
+          nickname: guestName,
+          city: locCheck.location,
+          accountType: 'guest',
+          configured: true,
+        },
+        { isFreshAccount: false }
+      );
       const shouldStart = pendingStartAfterAuth;
       closeAccountModal(true);
       if (shouldStart) {
@@ -3160,8 +3385,8 @@
         username: rawUsername,
         password: rawPassword,
         location: rawLocation,
-        playerId: playerProfile.playerId,
-        highScore: bestMeters,
+        playerId: leaderboardService.generatePlayerId(),
+        highScore: 0,
       });
     } else {
       outcome = await leaderboardService.loginAccount({
@@ -3178,20 +3403,20 @@
       return;
     }
 
-    playerProfile = {
-      playerId: outcome.profile.playerId,
-      nickname: outcome.profile.nickname,
-      city: outcome.profile.city,
-      accountType: 'registered',
-      configured: true,
-    };
-    leaderboardService.saveProfile(playerProfile);
-    if (typeof outcome.highScore === 'number' && outcome.highScore > bestMeters) {
-      bestMeters = outcome.highScore;
-      saveBestScore(bestMeters);
-      updateHudDisplay();
-    }
-    updateHomeAccountUi();
+    activateAccountSession(
+      {
+        playerId: outcome.profile.playerId,
+        nickname: outcome.profile.nickname,
+        city: outcome.profile.city,
+        accountType: 'registered',
+        configured: true,
+      },
+      {
+        serverBest: Number(outcome.highScore || 0),
+        serverCoins: Number(outcome.coins || 0),
+        isFreshAccount: activeAuthMode === 'signup',
+      }
+    );
     updateProfileStrip('Account Synced');
     const shouldStart = pendingStartAfterAuth;
     closeAccountModal(true);
@@ -3205,22 +3430,27 @@
     const locCheck = leaderboardService.sanitizeLocation(rawLocation);
     const chosenLocation = locCheck.valid ? locCheck.location : 'Douala';
     const rawUsername = accountUsername ? accountUsername.value.trim() : '';
+    const guestPid = getOrCreateGuestPlayerId();
     let guestName = '';
     if (rawUsername) {
       const nickCheck = leaderboardService.sanitizeAndValidateNickname(rawUsername);
       if (nickCheck.valid) guestName = nickCheck.nickname;
     }
     if (!guestName) {
-      const suffix = (playerProfile.playerId || 'R237').slice(-4).toUpperCase();
+      const suffix = (guestPid || 'R237').slice(-4).toUpperCase();
       guestName = `Guest_${suffix}`;
     }
 
-    playerProfile.nickname = guestName;
-    playerProfile.city = chosenLocation;
-    playerProfile.accountType = 'guest';
-    playerProfile.configured = true;
-    leaderboardService.saveProfile(playerProfile);
-    updateHomeAccountUi();
+    activateAccountSession(
+      {
+        playerId: guestPid,
+        nickname: guestName,
+        city: chosenLocation,
+        accountType: 'guest',
+        configured: true,
+      },
+      { isFreshAccount: false }
+    );
     const shouldStart = pendingStartAfterAuth;
     closeAccountModal(true);
     if (shouldStart) {
@@ -3265,12 +3495,15 @@
     const beatPrevRecord = finalMeters > bestMeters;
     if (beatPrevRecord) {
       bestMeters = finalMeters;
-      saveBestScore(bestMeters);
+      saveBestScore(bestMeters, playerProfile && playerProfile.playerId);
       if (!passedBestThisRun && !withCrashImpact) {
         triggerHighScoreCelebration();
       } else if (!passedBestThisRun && finalMeters >= 25) {
         sound.playHooYeahCelebration();
       }
+    }
+    if (playerProfile && playerProfile.accountType === 'registered') {
+      leaderboardService.syncAccountCoins(playerProfile, savedCoinBank);
     }
 
     if (withCrashImpact) {
@@ -3805,20 +4038,79 @@
   if (btnOpenAbout) {
     btnOpenAbout.addEventListener('click', () => openAbout('about'));
   }
+  const GARAGE_BIKE_META = {
+    classic: {
+      name: 'Bendskin Classic 125',
+      specs: '125cc Street • Nimble Crimson-Gold Chassis',
+    },
+    sport: {
+      name: 'Okada Sport 250',
+      specs: '250cc Sport • Twin Discs & Agile Handling',
+    },
+    superbike: {
+      name: 'Douala Superbike 600',
+      specs: '600cc Champion • Carbon & Championship Gold',
+    },
+  };
+  let previewGarageBikeId = 'classic';
+
+  function selectGaragePreviewBike(bikeId) {
+    const id = GARAGE_BIKE_META[bikeId] ? bikeId : 'classic';
+    previewGarageBikeId = id;
+    const meta = GARAGE_BIKE_META[id];
+    if (garagePreviewName) garagePreviewName.textContent = meta.name;
+    if (garagePreviewSpecs) garagePreviewSpecs.textContent = meta.specs;
+    if (garageBikeCards) {
+      garageBikeCards.forEach((card) => {
+        card.classList.toggle('preview-selected', card.dataset.garageBike === id);
+      });
+    }
+    if (window.BendskinUltra3D && typeof window.BendskinUltra3D.setGarageBike === 'function') {
+      window.BendskinUltra3D.setGarageBike(id);
+    }
+  }
+
+  function openGarageModal() {
+    if (!garageModal) return;
+    syncCoinDisplays();
+    garageModal.classList.remove('hidden');
+    selectGaragePreviewBike(previewGarageBikeId);
+    if (
+      garageBikeCanvas &&
+      window.BendskinUltra3D &&
+      typeof window.BendskinUltra3D.initGaragePreview === 'function'
+    ) {
+      window.BendskinUltra3D.initGaragePreview(garageBikeCanvas, previewGarageBikeId);
+    }
+  }
+
+  function closeGarageModal() {
+    if (garageModal) garageModal.classList.add('hidden');
+    if (window.BendskinUltra3D && typeof window.BendskinUltra3D.stopGaragePreview === 'function') {
+      window.BendskinUltra3D.stopGaragePreview();
+    }
+  }
+
   if (btnOpenGarage && garageModal) {
-    btnOpenGarage.addEventListener('click', () => {
-      syncCoinDisplays();
-      garageModal.classList.remove('hidden');
-    });
+    btnOpenGarage.addEventListener('click', openGarageModal);
   }
   if (btnCloseGarage && garageModal) {
-    btnCloseGarage.addEventListener('click', () => {
-      garageModal.classList.add('hidden');
-    });
+    btnCloseGarage.addEventListener('click', closeGarageModal);
   }
   if (garageModal) {
     garageModal.addEventListener('click', (event) => {
-      if (event.target === garageModal) garageModal.classList.add('hidden');
+      if (event.target === garageModal) closeGarageModal();
+    });
+  }
+  if (garageBikeCards) {
+    garageBikeCards.forEach((card) => {
+      card.addEventListener('click', () => selectGaragePreviewBike(card.dataset.garageBike));
+      card.addEventListener('keydown', (ev) => {
+        if (ev.key === 'Enter' || ev.key === ' ') {
+          ev.preventDefault();
+          selectGaragePreviewBike(card.dataset.garageBike);
+        }
+      });
     });
   }
   btnGameoverLeaderboard.addEventListener('click', openLeaderboard);
@@ -3848,6 +4140,20 @@
   if (btnModeManual) {
     btnModeManual.addEventListener('click', () => {
       userSettings.driveMode = 'manual';
+      saveSettings(userSettings);
+      applySettingsUi();
+    });
+  }
+  if (btnHandRight) {
+    btnHandRight.addEventListener('click', () => {
+      userSettings.controlHandedness = 'right';
+      saveSettings(userSettings);
+      applySettingsUi();
+    });
+  }
+  if (btnHandLeft) {
+    btnHandLeft.addEventListener('click', () => {
+      userSettings.controlHandedness = 'left';
       saveSettings(userSettings);
       applySettingsUi();
     });
@@ -4039,12 +4345,25 @@
   // =========================================================
   // 10. Near-Miss Combo & Shrunk-AABB Collision Detection
   // =========================================================
+  let coinSyncTimerId = null;
+  function scheduleCoinCloudSync() {
+    if (!playerProfile || playerProfile.accountType !== 'registered') return;
+    if (coinSyncTimerId) window.clearTimeout(coinSyncTimerId);
+    const snapshotProfile = { ...playerProfile };
+    const snapshotCoins = savedCoinBank;
+    coinSyncTimerId = window.setTimeout(() => {
+      coinSyncTimerId = null;
+      leaderboardService.syncAccountCoins(snapshotProfile, snapshotCoins);
+    }, 1500);
+  }
+
   function addCoins(amount) {
     if (!amount || amount <= 0) return;
     runCoins += amount;
     savedCoinBank += amount;
-    saveCoinBank(savedCoinBank);
+    saveCoinBank(savedCoinBank, playerProfile && playerProfile.playerId);
     syncCoinDisplays();
+    scheduleCoinCloudSync();
   }
 
   function triggerNearMiss(entity, cfg) {
@@ -4443,23 +4762,54 @@
           entity.visualLane = entity.lane;
         }
         const distAhead = entity.worldZ - playerZ;
+
+        // Ambient mid-range lane telegraph (~0.72s turn signal before shifting smoothly)
         if (
           !entity.yieldChecked &&
-          distAhead > 8 &&
-          distAhead < 30 &&
+          typeof entity.pendingLane !== 'number' &&
+          distAhead > 34 &&
+          distAhead < 85 &&
           speedKmh > cfg.speedKmh + 22 &&
           Math.abs(entity.visualLane - currentLane) < 0.55
         ) {
           entity.yieldChecked = true;
-          if (Math.random() < 0.6) {
-            tryYieldVehicleLane(entity);
+          if (Math.random() < 0.55) {
+            tryYieldVehicleLane(entity, false);
           }
         }
-        if (Math.abs(entity.visualLane - entity.lane) > 0.002) {
-          entity.visualLane += (entity.lane - entity.visualLane) * Math.min(1, 5.5 * dt);
+
+        // Phase 1: Flash turn-signal indicator cleanly inside current lane BEFORE shifting
+        if (entity.signalTimer > 0) {
+          entity.signalTimer = Math.max(0, entity.signalTimer - dt);
+          if (entity.signalTimer === 0 && typeof entity.pendingLane === 'number') {
+            const unsafeLateMerge =
+              !entity.yielding &&
+              distAhead > -2 &&
+              distAhead < 22 &&
+              Math.abs(entity.pendingLane - targetLane) < 0.75;
+            if (
+              unsafeLateMerge ||
+              !isLaneClearForVehicle(entity.pendingLane, entity.worldZ, entity, 14)
+            ) {
+              entity.pendingLane = null;
+              entity.signalDir = 0;
+              entity.yielding = false;
+            } else {
+              entity.lane = entity.pendingLane;
+              entity.pendingLane = null;
+            }
+          }
+        }
+
+        // Phase 2: Smooth lateral lane slide while keeping blinker lit until settled
+        if (Math.abs(entity.visualLane - entity.lane) > 0.004) {
+          entity.visualLane += (entity.lane - entity.visualLane) * Math.min(1, 3.4 * dt);
         } else {
           entity.visualLane = entity.lane;
-          entity.yielding = false;
+          if (typeof entity.pendingLane !== 'number') {
+            entity.signalDir = 0;
+            entity.yielding = false;
+          }
         }
 
         let effectiveKmh = cfg.speedKmh;
@@ -4479,9 +4829,9 @@
         }
 
         if (sameLaneBlocker) {
-          const merged = tryYieldVehicleLane(entity);
+          const merged = tryYieldVehicleLane(entity, false);
           const blockerCfg = ENTITY_CONFIG[sameLaneBlocker.type];
-          if (!merged && blockerCfg.isVehicle && sameLaneBlocker.worldZ - entity.worldZ < 15) {
+          if (!merged && blockerCfg.isVehicle && sameLaneBlocker.worldZ - entity.worldZ < 18) {
             effectiveKmh = Math.max(46, Math.min(cfg.speedKmh, blockerCfg.speedKmh));
           }
         }
@@ -4490,7 +4840,7 @@
         const otherLanesOccupied = getOccupiedOtherLanesSet(entity.lane, candidateWorldZ, entity, 15);
         // Prevent any moving vehicle from sitting alongside 2 other blocked lanes to seal the road
         if (otherLanesOccupied.size >= 2) {
-          if (!tryYieldVehicleLane(entity) && entity.worldZ > playerZ + 18) {
+          if (!tryYieldVehicleLane(entity, false) && entity.worldZ > playerZ + 18) {
             effectiveKmh = Math.max(effectiveKmh, cfg.speedKmh + 24);
           }
         }
@@ -4627,8 +4977,8 @@
   }
 
   function drawSkyAndHorizon(horizonY) {
-    const isLow = userSettings.graphicsQuality === 'low';
-    const isHigh3D = isQualityAtLeast('high');
+    const isLow = false;
+    const isHigh3D = isQualityAtLeast('normal');
     const isUltra = userSettings.graphicsQuality === 'ultra';
 
     if (isLow) {
@@ -4837,8 +5187,8 @@
     const bottomY = getBottomY();
     const cameraZ = getActiveCameraZ();
     const segLen = WORLD_SPACE.ROAD_SEGMENT_METERS;
-    const isLow = userSettings.graphicsQuality === 'low';
-    const isHigh3D = isQualityAtLeast('high');
+    const isLow = false;
+    const isHigh3D = isQualityAtLeast('normal');
     const isUltra = userSettings.graphicsQuality === 'ultra';
 
     // Dusty laterite earth shoulders
@@ -5048,8 +5398,8 @@
     const buildingLane = prop.side < 0 ? -1.45 : 3.45;
     const p = projectPoint(laneCoord, prop.z);
     const s = p.scale;
-    const isLow = userSettings.graphicsQuality === 'low';
-    const isHigh3D = isQualityAtLeast('high');
+    const isLow = false;
+    const isHigh3D = isQualityAtLeast('normal');
     const isUltra = userSettings.graphicsQuality === 'ultra';
     const horizonAlpha = Math.min(1, prop.z / 0.05);
 
@@ -5659,20 +6009,55 @@
     return false;
   }
 
+  function drawCanvasVehicleSignals(entity, p, s) {
+    const cfg = ENTITY_CONFIG[entity.type];
+    if (!cfg || !cfg.isVehicle) return;
+    const laneFloat = typeof entity.visualLane === 'number' ? entity.visualLane : entity.lane;
+    const laneErr = entity.lane - laneFloat;
+    const sigDir = entity.signalDir || (laneErr < -0.02 ? -1 : laneErr > 0.02 ? 1 : 0);
+    if (!sigDir) return;
+    const blinkOn = Math.floor(performance.now() * 0.0075) % 2 === 0;
+    if (!blinkOn) return;
+
+    const halfSpread =
+      entity.type === 'rival_moto' ? 14 : entity.type === 'timber_truck' ? 40 : 34;
+    const sigY = p.y - (entity.type === 'rival_moto' ? 30 : 28) * s;
+    const sigX = p.x + sigDir * halfSpread * s;
+
+    ctx.save();
+    ctx.fillStyle = 'rgba(245, 158, 11, 0.45)';
+    ctx.beginPath();
+    ctx.arc(sigX, sigY, 13 * s, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.fillStyle = '#fbbf24';
+    ctx.beginPath();
+    ctx.arc(sigX, sigY, 6 * s, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.fillStyle = '#fffbeb';
+    ctx.font = `900 ${Math.max(8, Math.round(12 * s))}px sans-serif`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(sigDir < 0 ? '<' : '>', sigX, sigY - 12 * s);
+    ctx.restore();
+  }
+
   function drawEntity(entity) {
     if (entity.z < 0.008 || entity.z > 1.06) return;
     const entityLane = typeof entity.visualLane === 'number' ? entity.visualLane : entity.lane;
     const p = projectPoint(entityLane, entity.z);
     const s = p.scale;
     const wheelPhase = entity.wheelPhase || 0;
-    const isLow = userSettings.graphicsQuality === 'low';
-    const isHigh3D = isQualityAtLeast('high');
+    const isLow = false;
+    const isHigh3D = isQualityAtLeast('normal');
     const horizonAlpha = Math.min(1, entity.z / 0.05);
 
     ctx.save();
     ctx.globalAlpha = horizonAlpha;
 
     if (isHigh3D && drawUltra3DEntity(entity)) {
+      drawCanvasVehicleSignals(entity, p, s);
       ctx.restore();
       return;
     }
@@ -6056,10 +6441,11 @@
     }
 
     ctx.restore();
+    drawCanvasVehicleSignals(entity, p, s);
   }
 
   function drawWindStreaks() {
-    if (currentState !== GAME_STATE.PLAYING || userSettings.graphicsQuality === 'low') return;
+    if (currentState !== GAME_STATE.PLAYING) return;
     const intensity = Math.max(0, Math.min(1, (speedKmh - 75) / 75));
     if (intensity <= 0.04) return;
 
@@ -6272,8 +6658,8 @@
     ctx.scale(0.72, 0.72);
     ctx.rotate(handlebarAngle);
 
-    // Warm forward headlight cone (enabled on High & Ultra 3D)
-    if (isQualityAtLeast('high')) {
+    // Warm forward headlight cone (enabled on Normal, High & Ultra)
+    if (isQualityAtLeast('normal')) {
       const beamGrad = ctx.createLinearGradient(0, -245, 0, -32);
       beamGrad.addColorStop(0, 'rgba(254, 240, 138, 0)');
       beamGrad.addColorStop(1, 'rgba(254, 240, 138, 0.16)');
@@ -6484,7 +6870,9 @@
   function render() {
     if (ultra3DEnabled && window.BendskinUltra3D) {
       ctx.clearRect(0, 0, LOGICAL_WIDTH, logicalHeight);
+      const activeSteerDir = Math.max(-1, Math.min(1, (targetLane - currentLane) * 1.4));
       window.BendskinUltra3D.renderFrame({
+        quality: userSettings.graphicsQuality,
         cameraZ: getActiveCameraZ(),
         currentLane,
         handlebarAngle,
@@ -6492,6 +6880,9 @@
         suspensionPitch,
         speedKmh,
         braking: isBrakingActive(),
+        throttling: isThrottlingActive(),
+        hornHeld,
+        steerDir: activeSteerDir,
         distanceMeters,
         rattleTimer,
         celebrationTimer,

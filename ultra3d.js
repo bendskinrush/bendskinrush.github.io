@@ -28,6 +28,9 @@
   let steeringGroup = null;
   let rightBrakeLever = null;
   let rightFingersGroup = null;
+  let rightLeverFingersGroup = null;
+  let leftThumbPivot = null;
+  let rightGripPivot = null;
   let leftArmGroup = null;
   let leftRestAnchor = null;
   let leftPumpAnchor = null;
@@ -37,6 +40,21 @@
   let dashCanvas = null;
   let dashCtx = null;
   let dashTexture = null;
+  let cockpitTankMat = null;
+  let cockpitTrimMat = null;
+  let currentQualityMode = 'ultra';
+  let currentLiveryId = 'classic';
+
+  // Full 3D Garage Bike Showroom state
+  let garageRenderer = null;
+  let garageScene = null;
+  let garageCamera = null;
+  let garageTurntable = null;
+  let garageRafId = null;
+  let garageDragActive = false;
+  let garageLastPointerX = 0;
+  let garageSpinSpeed = 0.55;
+  let garageLiveryId = 'classic';
 
   // Pooled 3D scenery & entity meshes
   const propMeshMap = new WeakMap();
@@ -247,11 +265,12 @@
     const hemi = new THREE.HemisphereLight('#fde68a', '#431407', 0.92);
     scene.add(hemi);
 
-    sunLight = new THREE.DirectionalLight('#fff1d0', 1.45);
+    sunLight = new THREE.DirectionalLight('#fff1d0', 1.48);
     sunLight.position.set(14, 24, -40);
     sunLight.castShadow = true;
-    sunLight.shadow.mapSize.width = 1024;
-    sunLight.shadow.mapSize.height = 1024;
+    sunLight.shadow.mapSize.width = 2048;
+    sunLight.shadow.mapSize.height = 2048;
+    sunLight.shadow.bias = -0.0005;
     sunLight.shadow.camera.near = 2;
     sunLight.shadow.camera.far = 140;
     sunLight.shadow.camera.left = -22;
@@ -321,96 +340,231 @@
     scene.add(rivalLineMesh);
   }
 
+  const BIKE_LIVERIES = {
+    classic: {
+      name: 'Bendskin Classic 125',
+      paint: '#b91c1c',
+      trim: '#eab308',
+      frame: '#1e293b',
+      seat: '#111827',
+      stripe: '#facc15',
+    },
+    sport: {
+      name: 'Okada Sport 250',
+      paint: '#0284c7',
+      trim: '#e2e8f0',
+      frame: '#0f172a',
+      seat: '#1e293b',
+      stripe: '#38bdf8',
+    },
+    superbike: {
+      name: 'Douala Superbike 600',
+      paint: '#eab308',
+      trim: '#0f172a',
+      frame: '#334155',
+      seat: '#090d16',
+      stripe: '#ef4444',
+    },
+  };
+
+  function getBikeLivery(bikeId) {
+    return BIKE_LIVERIES[bikeId] || BIKE_LIVERIES.classic;
+  }
+
   function buildArticulatedHandAndArm(side) {
     // side = -1 (left) | +1 (right)
     const arm = new THREE.Group();
 
     const jacketMat = new THREE.MeshStandardMaterial({
       color: '#1e293b',
-      roughness: 0.72,
-      metalness: 0.12,
+      roughness: 0.68,
+      metalness: 0.14,
     });
     const leatherMat = new THREE.MeshStandardMaterial({
       color: '#0f172a',
-      roughness: 0.45,
-      metalness: 0.18,
+      roughness: 0.42,
+      metalness: 0.22,
     });
     const carbonKnuckleMat = new THREE.MeshStandardMaterial({
       color: '#334155',
-      roughness: 0.22,
-      metalness: 0.72,
+      roughness: 0.2,
+      metalness: 0.78,
     });
     const accentMat = new THREE.MeshStandardMaterial({
       color: side === 1 ? '#ef4444' : '#facc15',
-      roughness: 0.35,
-      metalness: 0.25,
+      roughness: 0.32,
+      metalness: 0.28,
     });
     const stripeMat = new THREE.MeshStandardMaterial({
       color: '#cbd5e1',
-      roughness: 0.3,
-      metalness: 0.6,
+      roughness: 0.28,
+      metalness: 0.65,
+    });
+    const skinMat = new THREE.MeshStandardMaterial({
+      color: '#5c3824',
+      roughness: 0.56,
+      metalness: 0.04,
+    });
+    const palmSkinMat = new THREE.MeshStandardMaterial({
+      color: '#734832',
+      roughness: 0.62,
+      metalness: 0.03,
+    });
+    const nailMat = new THREE.MeshStandardMaterial({
+      color: '#b88b72',
+      roughness: 0.26,
+      metalness: 0.08,
     });
 
-    // Forearm coming toward rider shoulder
-    const sleeveGeo = new THREE.CylinderGeometry(0.036, 0.046, 0.34, 12);
+    // Forearm coming toward rider shoulder with padded riding jacket ribbing
+    const sleeveGeo = new THREE.CylinderGeometry(0.037, 0.048, 0.35, 14);
     const sleeve = new THREE.Mesh(sleeveGeo, jacketMat);
     sleeve.rotation.x = Math.PI * 0.42;
     sleeve.rotation.z = side * 0.26;
-    sleeve.position.set(side * 0.055, -0.055, 0.17);
+    sleeve.position.set(side * 0.056, -0.056, 0.175);
     arm.add(sleeve);
 
-    // Reflective cuff stripe
-    const cuffGeo = new THREE.CylinderGeometry(0.038, 0.039, 0.022, 12);
+    // Wrist gauntlet strap & reflective pipings
+    const cuffGeo = new THREE.CylinderGeometry(0.039, 0.04, 0.026, 14);
     const cuff = new THREE.Mesh(cuffGeo, stripeMat);
     cuff.rotation.x = Math.PI * 0.42;
     cuff.rotation.z = side * 0.26;
-    cuff.position.set(side * 0.024, -0.014, 0.062);
+    cuff.position.set(side * 0.023, -0.013, 0.062);
     arm.add(cuff);
 
-    // Glove wrist & palm resting over the handlebar grip
+    const strap = new THREE.Mesh(new THREE.BoxGeometry(0.064, 0.015, 0.022), leatherMat);
+    strap.position.set(side * 0.008, 0.012, 0.046);
+    arm.add(strap);
+
+    // Glove wrist & palm resting over the handlebar grip (fingerless tactile sport glove)
     const gloveAnchor = new THREE.Group();
     arm.add(gloveAnchor);
 
-    const palm = new THREE.Mesh(new THREE.BoxGeometry(0.078, 0.032, 0.072), leatherMat);
-    palm.position.set(0, 0.021, 0.012);
+    const palm = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.03, 0.068), leatherMat);
+    palm.position.set(0, 0.022, 0.013);
     gloveAnchor.add(palm);
 
-    // Molded carbon knuckle guard bridge
-    const knuckle = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.016, 0.026), carbonKnuckleMat);
-    knuckle.position.set(0, 0.038, -0.01);
-    knuckle.rotation.x = 0.2;
+    // Lower visible heel of hand
+    const palmPad = new THREE.Mesh(new THREE.BoxGeometry(0.072, 0.01, 0.048), palmSkinMat);
+    palmPad.position.set(0, 0.007, 0.016);
+    gloveAnchor.add(palmPad);
+
+    // Molded carbon knuckle armor bridge across 4 fingers
+    const knuckle = new THREE.Mesh(new THREE.BoxGeometry(0.082, 0.016, 0.025), carbonKnuckleMat);
+    knuckle.position.set(0, 0.038, -0.009);
+    knuckle.rotation.x = 0.22;
     gloveAnchor.add(knuckle);
 
-    // Stitched accent band on back of glove
+    // Stitched accent band + buckle detail on back of glove
     const band = new THREE.Mesh(new THREE.BoxGeometry(0.068, 0.008, 0.012), accentMat);
-    band.position.set(0, 0.039, 0.018);
+    band.position.set(0, 0.039, 0.019);
     gloveAnchor.add(band);
 
-    // Thumb curled underneath inner edge of grip
-    const thumb = new THREE.Mesh(new THREE.CylinderGeometry(0.011, 0.013, 0.052, 8), leatherMat);
-    thumb.rotation.z = side * 1.15;
-    thumb.rotation.x = -0.3;
-    thumb.position.set(-side * 0.044, -0.002, -0.008);
-    gloveAnchor.add(thumb);
+    // Articulated bare Thumb (proximal + distal + nail) capable of pressing HORN button
+    const thumbPivot = new THREE.Group();
+    thumbPivot.position.set(-side * 0.042, 0.014, -0.004);
+    const thumbProx = new THREE.Mesh(new THREE.CylinderGeometry(0.0095, 0.011, 0.032, 10), skinMat);
+    thumbProx.rotation.z = side * 1.15;
+    thumbProx.rotation.x = -0.32;
+    thumbProx.position.set(-side * 0.014, -0.005, -0.004);
+    thumbPivot.add(thumbProx);
 
-    // 4 articulated curved fingers wrapping forward/down over grip & lever
-    const fingersGroup = new THREE.Group();
-    fingersGroup.position.set(0, 0.024, -0.022);
-    for (let f = 0; f < 4; f += 1) {
-      const fx = (f - 1.5) * 0.0185;
-      const prox = new THREE.Mesh(new THREE.CylinderGeometry(0.0085, 0.0095, 0.034, 8), leatherMat);
-      prox.rotation.x = 1.2;
-      prox.position.set(fx, -0.004, -0.016);
-      fingersGroup.add(prox);
+    const thumbDist = new THREE.Mesh(new THREE.CylinderGeometry(0.0078, 0.0092, 0.026, 10), skinMat);
+    thumbDist.rotation.z = side * 0.72;
+    thumbDist.rotation.x = -0.45;
+    thumbDist.position.set(-side * 0.028, -0.012, -0.011);
+    thumbPivot.add(thumbDist);
 
-      const tip = new THREE.Mesh(new THREE.CylinderGeometry(0.0075, 0.0085, 0.028, 8), carbonKnuckleMat);
-      tip.rotation.x = 2.35;
-      tip.position.set(fx, -0.022, -0.025);
-      fingersGroup.add(tip);
+    const thumbNail = new THREE.Mesh(new THREE.BoxGeometry(0.009, 0.004, 0.011), nailMat);
+    thumbNail.position.set(-side * 0.031, -0.005, -0.015);
+    thumbPivot.add(thumbNail);
+    gloveAnchor.add(thumbPivot);
+
+    // Helper to build a visible 3-joint individual rider finger
+    function makeFingerMesh(xOffset, lengthScale) {
+      const fGroup = new THREE.Group();
+      fGroup.position.set(xOffset, 0, 0);
+
+      // Leather half-cut finger base ring + exposed bare knuckles/phalanges
+      const collar = new THREE.Mesh(new THREE.CylinderGeometry(0.0088, 0.0096, 0.014, 10), leatherMat);
+      collar.rotation.x = 1.15;
+      collar.position.set(0, -0.001, -0.006);
+      fGroup.add(collar);
+
+      const prox = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.008, 0.0088, 0.032 * lengthScale, 10),
+        skinMat
+      );
+      prox.rotation.x = 1.24;
+      prox.position.set(0, -0.006, -0.02 * lengthScale);
+      fGroup.add(prox);
+
+      const mid = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.0072, 0.008, 0.026 * lengthScale, 10),
+        skinMat
+      );
+      mid.rotation.x = 2.08;
+      mid.position.set(0, -0.018, -0.029 * lengthScale);
+      fGroup.add(mid);
+
+      const tip = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.0064, 0.0072, 0.022 * lengthScale, 10),
+        skinMat
+      );
+      tip.rotation.x = 2.75;
+      tip.position.set(0, -0.031, -0.026 * lengthScale);
+      fGroup.add(tip);
+
+      const nail = new THREE.Mesh(new THREE.BoxGeometry(0.0082, 0.0035, 0.009), nailMat);
+      nail.rotation.x = 1.05;
+      nail.position.set(0, -0.028, -0.031 * lengthScale);
+      fGroup.add(nail);
+
+      return fGroup;
     }
-    gloveAnchor.add(fingersGroup);
 
-    return { arm, fingersGroup };
+    // Separate lever-pulling fingers (index+middle on right) vs grip-holding fingers
+    const fingersGroup = new THREE.Group();
+    fingersGroup.position.set(0, 0.025, -0.02);
+
+    const leverFingersGroup = new THREE.Group();
+    leverFingersGroup.position.set(0, 0.025, -0.02);
+
+    // Side = -1 Left hand: inner = +x (index at +0.028 -> pinky at -0.028)
+    // Side = +1 Right hand: inner = -x (index at -0.028 -> pinky at +0.028)
+    const fingerSpecs = [
+      { idx: 0, slot: -side * 0.027, len: 1.0, isLever: true },   // Index
+      { idx: 1, slot: -side * 0.009, len: 1.08, isLever: true },  // Middle
+      { idx: 2, slot: side * 0.009, len: 0.98, isLever: false },  // Ring
+      { idx: 3, slot: side * 0.027, len: 0.82, isLever: false },  // Little
+    ];
+
+    fingerSpecs.forEach((spec) => {
+      const fMesh = makeFingerMesh(spec.slot, spec.len);
+      if (side === 1 && spec.isLever) {
+        // Right index & middle slightly poised forward toward brake lever
+        fMesh.rotation.x = -0.22;
+        leverFingersGroup.add(fMesh);
+      } else {
+        fingersGroup.add(fMesh);
+      }
+    });
+
+    gloveAnchor.add(fingersGroup);
+    gloveAnchor.add(leverFingersGroup);
+
+    return { arm, gloveAnchor, fingersGroup, leverFingersGroup, thumbPivot };
+  }
+
+  function setCockpitLivery(bikeId) {
+    currentLiveryId = BIKE_LIVERIES[bikeId] ? bikeId : 'classic';
+    const liv = getBikeLivery(currentLiveryId);
+    if (cockpitTankMat) {
+      cockpitTankMat.color.set(liv.paint);
+    }
+    if (cockpitTrimMat) {
+      cockpitTrimMat.color.set(liv.trim);
+    }
   }
 
   function buildBikeCockpit() {
@@ -418,33 +572,42 @@
     scene.add(bikeRoot);
 
     dashCanvas = document.createElement('canvas');
-    dashCanvas.width = 256;
-    dashCanvas.height = 256;
+    dashCanvas.width = 512;
+    dashCanvas.height = 512;
     dashCtx = dashCanvas.getContext('2d');
     dashTexture = new THREE.CanvasTexture(dashCanvas);
     dashTexture.encoding = THREE.sRGBEncoding;
+    if (renderer && renderer.capabilities) {
+      dashTexture.anisotropy = Math.min(8, renderer.capabilities.getMaxAnisotropy() || 4);
+    }
 
-    const tankPaint = new THREE.MeshPhysicalMaterial({
-      color: '#b91c1c',
-      roughness: 0.18,
-      metalness: 0.45,
+    const liv = getBikeLivery(currentLiveryId);
+    cockpitTankMat = new THREE.MeshPhysicalMaterial({
+      color: liv.paint,
+      roughness: 0.16,
+      metalness: 0.48,
       clearcoat: 1.0,
-      clearcoatRoughness: 0.12,
+      clearcoatRoughness: 0.1,
     });
-    const goldMetal = new THREE.MeshStandardMaterial({
-      color: '#eab308',
-      roughness: 0.25,
+    cockpitTrimMat = new THREE.MeshStandardMaterial({
+      color: liv.trim,
+      roughness: 0.24,
       metalness: 0.88,
     });
     const chromeMetal = new THREE.MeshStandardMaterial({
       color: '#e2e8f0',
-      roughness: 0.16,
-      metalness: 0.92,
+      roughness: 0.15,
+      metalness: 0.94,
     });
     const darkMetal = new THREE.MeshStandardMaterial({
       color: '#1e293b',
-      roughness: 0.45,
-      metalness: 0.65,
+      roughness: 0.42,
+      metalness: 0.68,
+    });
+    const carbonMat = new THREE.MeshStandardMaterial({
+      color: '#0f172a',
+      roughness: 0.35,
+      metalness: 0.52,
     });
     const rubberMat = new THREE.MeshStandardMaterial({
       color: '#090d16',
@@ -452,168 +615,250 @@
       metalness: 0.05,
     });
 
-    // Sculpted front fuel tank body visible below bars
-    const tankMain = new THREE.Mesh(new THREE.CylinderGeometry(0.14, 0.2, 0.5, 18), tankPaint);
+    // Sculpted front fuel tank body & knee cutouts visible below bars
+    const tankMain = new THREE.Mesh(new THREE.CylinderGeometry(0.145, 0.21, 0.52, 22), cockpitTankMat);
     tankMain.rotation.x = Math.PI * 0.44;
-    tankMain.scale.set(1.22, 1, 0.72);
+    tankMain.scale.set(1.24, 1, 0.72);
     tankMain.position.set(0, -0.16, 0.05);
     bikeRoot.add(tankMain);
 
-    // Center tank stripe & brushed aluminum filler cap
-    const tankStripe = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.015, 0.4), goldMetal);
-    tankStripe.position.set(0, -0.065, 0.04);
+    // Center tank stripe & brushed CNC aero filler cap
+    const tankStripe = new THREE.Mesh(new THREE.BoxGeometry(0.058, 0.014, 0.41), cockpitTrimMat);
+    tankStripe.position.set(0, -0.064, 0.04);
     tankStripe.rotation.x = 0.18;
     bikeRoot.add(tankStripe);
 
-    const fuelCap = new THREE.Mesh(new THREE.CylinderGeometry(0.038, 0.042, 0.018, 16), chromeMetal);
-    fuelCap.position.set(0, -0.055, -0.02);
-    bikeRoot.add(fuelCap);
+    const fuelCapRing = new THREE.Mesh(new THREE.CylinderGeometry(0.042, 0.045, 0.016, 20), chromeMetal);
+    fuelCapRing.position.set(0, -0.055, -0.02);
+    bikeRoot.add(fuelCapRing);
+    const fuelCapCore = new THREE.Mesh(new THREE.CylinderGeometry(0.026, 0.026, 0.02, 12), darkMetal);
+    fuelCapCore.position.set(0, -0.054, -0.02);
+    bikeRoot.add(fuelCapCore);
 
-    // Steering triple-clamp + forks + handlebars + gauges + arms
+    // Steering triple-clamp + forks + nose cowling + twin-cluster dash + handlebars + arms
     steeringGroup = new THREE.Group();
     steeringGroup.position.set(0, 0.05, -0.36);
     bikeRoot.add(steeringGroup);
 
-    // Dual upside-down gold front fork tubes + clamps
+    // Dual upside-down gold/anodized front fork tubes + blue anodized preload caps
     [-1, 1].forEach((side) => {
-      const fork = new THREE.Mesh(new THREE.CylinderGeometry(0.022, 0.024, 0.48, 12), goldMetal);
+      const fork = new THREE.Mesh(new THREE.CylinderGeometry(0.023, 0.025, 0.48, 14), cockpitTrimMat);
       fork.rotation.x = -0.36;
       fork.position.set(side * 0.095, -0.18, -0.08);
       steeringGroup.add(fork);
+
+      const preloadCap = new THREE.Mesh(new THREE.CylinderGeometry(0.02, 0.02, 0.014, 6), chromeMetal);
+      preloadCap.position.set(side * 0.095, 0.025, -0.018);
+      steeringGroup.add(preloadCap);
     });
 
-    const clamp = new THREE.Mesh(new THREE.BoxGeometry(0.24, 0.028, 0.09), darkMetal);
-    clamp.position.set(0, 0.015, -0.02);
+    // CNC upper triple tree bridge + center stem nut
+    const clamp = new THREE.Mesh(new THREE.BoxGeometry(0.25, 0.026, 0.092), darkMetal);
+    clamp.position.set(0, 0.014, -0.02);
     steeringGroup.add(clamp);
+    const stemNut = new THREE.Mesh(new THREE.CylinderGeometry(0.018, 0.018, 0.016, 6), chromeMetal);
+    stemNut.position.set(0, 0.028, -0.022);
+    steeringGroup.add(stemNut);
+
+    // Ignition cylinder & silver key inserted at center console
+    const ignCyl = new THREE.Mesh(new THREE.CylinderGeometry(0.016, 0.017, 0.024, 14), carbonMat);
+    ignCyl.rotation.x = -0.32;
+    ignCyl.position.set(0, 0.024, -0.052);
+    steeringGroup.add(ignCyl);
+    const ignKey = new THREE.Mesh(new THREE.BoxGeometry(0.005, 0.024, 0.018), rubberMat);
+    ignKey.rotation.x = -0.32;
+    ignKey.position.set(0, 0.039, -0.047);
+    steeringGroup.add(ignKey);
+
+    // Aerodynamic front nose cowling + dual white LED halo strips visible at screen bottom-front
+    const noseFairing = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.185, 0.215, 0.26, 20, 1, true, Math.PI * 0.62, Math.PI * 0.76),
+      cockpitTankMat
+    );
+    noseFairing.rotation.x = Math.PI * 0.42;
+    noseFairing.position.set(0, 0.04, -0.11);
+    steeringGroup.add(noseFairing);
+
+    [-1, 1].forEach((side) => {
+      const drlBar = new THREE.Mesh(
+        new THREE.BoxGeometry(0.068, 0.008, 0.012),
+        new THREE.MeshBasicMaterial({ color: '#e0f2fe' })
+      );
+      drlBar.position.set(side * 0.11, 0.088, -0.14);
+      drlBar.rotation.z = -side * 0.28;
+      drlBar.rotation.y = side * 0.22;
+      steeringGroup.add(drlBar);
+    });
 
     // Front mudguard fender tip visible down ahead in the lane
     const fender = new THREE.Mesh(
-      new THREE.CylinderGeometry(0.11, 0.11, 0.12, 14, 1, false, -0.5, 1.0),
-      tankPaint
+      new THREE.CylinderGeometry(0.11, 0.11, 0.125, 16, 1, false, -0.5, 1.0),
+      cockpitTankMat
     );
     fender.rotation.z = Math.PI / 2;
     fender.rotation.x = 0.2;
     fender.position.set(0, -0.35, -0.22);
     steeringGroup.add(fender);
 
-    // Handlebar central stem + swept chrome bars + crossbar
-    const barCenter = new THREE.Mesh(new THREE.CylinderGeometry(0.015, 0.015, 0.21, 10), chromeMetal);
+    // Handlebar central stem + swept tapered aluminum bars
+    const barCenter = new THREE.Mesh(new THREE.CylinderGeometry(0.015, 0.015, 0.21, 12), chromeMetal);
     barCenter.rotation.z = Math.PI / 2;
     barCenter.position.set(0, 0.045, 0);
     steeringGroup.add(barCenter);
 
+    // Smoke-tinted Brake Fluid Reservoir cup on Right master cylinder
+    const cupStem = new THREE.Mesh(new THREE.CylinderGeometry(0.004, 0.004, 0.025, 8), darkMetal);
+    cupStem.position.set(0.135, 0.056, -0.005);
+    steeringGroup.add(cupStem);
+    const fluidCup = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.017, 0.015, 0.03, 14),
+      new THREE.MeshPhysicalMaterial({ color: '#d97706', transparent: true, opacity: 0.78, roughness: 0.15 })
+    );
+    fluidCup.position.set(0.135, 0.076, -0.008);
+    steeringGroup.add(fluidCup);
+    const cupCap = new THREE.Mesh(new THREE.CylinderGeometry(0.0185, 0.0185, 0.008, 14), rubberMat);
+    cupCap.position.set(0.135, 0.093, -0.008);
+    steeringGroup.add(cupCap);
+
     [-1, 1].forEach((side) => {
-      const armBar = new THREE.Mesh(new THREE.CylinderGeometry(0.014, 0.014, 0.21, 10), chromeMetal);
+      const armBar = new THREE.Mesh(new THREE.CylinderGeometry(0.014, 0.014, 0.21, 12), chromeMetal);
       armBar.rotation.z = Math.PI / 2 + side * 0.16;
       armBar.rotation.y = -side * 0.2;
       armBar.position.set(side * 0.185, 0.025, 0.02);
       steeringGroup.add(armBar);
 
-      // Ribbed rubber grip
-      const grip = new THREE.Mesh(new THREE.CylinderGeometry(0.021, 0.021, 0.125, 12), rubberMat);
+      // Bar-end CNC counterweight cap
+      const barEnd = new THREE.Mesh(new THREE.CylinderGeometry(0.018, 0.019, 0.022, 12), cockpitTrimMat);
+      barEnd.rotation.z = Math.PI / 2 + side * 0.16;
+      barEnd.rotation.y = -side * 0.2;
+      barEnd.position.set(side * 0.305, 0.005, 0.044);
+      steeringGroup.add(barEnd);
+
+      // Ribbed rubber grip + throttle twist pivot
+      const grip = new THREE.Mesh(new THREE.CylinderGeometry(0.021, 0.021, 0.125, 14), rubberMat);
       grip.rotation.z = Math.PI / 2 + side * 0.16;
       grip.rotation.y = -side * 0.2;
       grip.position.set(side * 0.235, 0.016, 0.03);
       steeringGroup.add(grip);
 
-      // Switchgear pod with colored button
-      const pod = new THREE.Mesh(new THREE.BoxGeometry(0.038, 0.044, 0.044), darkMetal);
+      // Multi-button switchgear pod (yellow HORN button on left, red KILL/START switch on right)
+      const pod = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.046, 0.046), carbonMat);
       pod.position.set(side * 0.16, 0.032, 0.015);
       steeringGroup.add(pod);
 
       const switchBtn = new THREE.Mesh(
-        new THREE.BoxGeometry(0.014, 0.014, 0.012),
+        new THREE.BoxGeometry(0.015, 0.014, 0.012),
         new THREE.MeshBasicMaterial({ color: side === 1 ? '#ef4444' : '#facc15' })
       );
-      switchBtn.position.set(side * 0.16, 0.038, 0.037);
+      switchBtn.position.set(side * 0.16, 0.038, 0.038);
       steeringGroup.add(switchBtn);
 
-      // Aluminum lever pivot
+      const passSwitch = new THREE.Mesh(
+        new THREE.BoxGeometry(0.012, 0.008, 0.01),
+        new THREE.MeshBasicMaterial({ color: side === 1 ? '#e2e8f0' : '#38bdf8' })
+      );
+      passSwitch.position.set(side * 0.16, 0.02, 0.038);
+      steeringGroup.add(passSwitch);
+
+      // Sculpted aluminum clutch/brake lever with ball end
       const leverPivot = new THREE.Group();
       leverPivot.position.set(side * 0.17, 0.026, -0.02);
-      const lever = new THREE.Mesh(new THREE.BoxGeometry(0.105, 0.008, 0.014), chromeMetal);
-      lever.position.set(side * 0.052, 0, -0.01);
-      leverPivot.add(lever);
+      const lever = new THREE.Mesh(new THREE.BoxGeometry(0.11, 0.008, 0.014), chromeMetal);
+      lever.position.set(side * 0.055, 0, -0.01);
+      const leverBall = new THREE.Mesh(new THREE.SphereGeometry(0.0085, 8, 8), chromeMetal);
+      leverBall.position.set(side * 0.11, 0, -0.01);
+      leverPivot.add(lever, leverBall);
       steeringGroup.add(leverPivot);
       if (side === 1) {
         rightBrakeLever = leverPivot;
       }
 
-      // Wing mirror on angled stalk
-      const stalk = new THREE.Mesh(new THREE.CylinderGeometry(0.006, 0.007, 0.14, 8), darkMetal);
+      // Wing mirror on sculpted stalk + amber repeater strip
+      const stalk = new THREE.Mesh(new THREE.CylinderGeometry(0.006, 0.007, 0.145, 10), darkMetal);
       stalk.rotation.z = -side * 0.42;
       stalk.position.set(side * 0.175, 0.105, -0.02);
       steeringGroup.add(stalk);
 
-      const mirrorHousing = new THREE.Mesh(new THREE.BoxGeometry(0.098, 0.058, 0.018), darkMetal);
-      mirrorHousing.position.set(side * 0.205, 0.165, -0.025);
+      const mirrorHousing = new THREE.Mesh(new THREE.BoxGeometry(0.104, 0.06, 0.018), darkMetal);
+      mirrorHousing.position.set(side * 0.208, 0.168, -0.025);
       mirrorHousing.rotation.z = side * 0.08;
       mirrorHousing.rotation.y = -side * 0.18;
       steeringGroup.add(mirrorHousing);
 
       const mirrorGlass = new THREE.Mesh(
-        new THREE.PlaneGeometry(0.086, 0.044),
+        new THREE.PlaneGeometry(0.092, 0.048),
         new THREE.MeshStandardMaterial({
-          color: '#f97316',
+          color: '#fb923c',
           emissive: '#9a3412',
-          emissiveIntensity: 0.35,
-          roughness: 0.08,
-          metalness: 0.9,
+          emissiveIntensity: 0.32,
+          roughness: 0.06,
+          metalness: 0.92,
         })
       );
-      mirrorGlass.position.set(side * 0.205, 0.165, -0.014);
+      mirrorGlass.position.set(side * 0.208, 0.168, -0.014);
       mirrorGlass.rotation.z = side * 0.08;
       mirrorGlass.rotation.y = -side * 0.18;
       steeringGroup.add(mirrorGlass);
 
-      // Rider Hand & Armored Glove gripping each bar
-      const { arm, fingersGroup } = buildArticulatedHandAndArm(side);
-      arm.position.set(side * 0.235, 0.016, 0.03);
-      arm.rotation.y = -side * 0.2;
-      arm.rotation.z = side * 0.16;
+      // Articulated Rider Hand & Visible Fingers gripping each bar
+      const handData = buildArticulatedHandAndArm(side);
       if (side === 1) {
-        rightFingersGroup = fingersGroup;
-        steeringGroup.add(arm);
+        rightGripPivot = new THREE.Group();
+        rightGripPivot.position.set(0.235, 0.016, 0.03);
+        rightGripPivot.rotation.y = -0.2;
+        rightGripPivot.rotation.z = 0.16;
+        handData.arm.position.set(0, 0, 0);
+        handData.arm.rotation.set(0, 0, 0);
+        rightFingersGroup = handData.fingersGroup;
+        rightLeverFingersGroup = handData.leverFingersGroup;
+        rightGripPivot.add(handData.arm);
+        steeringGroup.add(rightGripPivot);
       } else {
         leftRestAnchor = new THREE.Group();
         leftRestAnchor.position.set(-0.235, 0.016, 0.03);
         leftRestAnchor.rotation.y = 0.2;
         leftRestAnchor.rotation.z = -0.16;
-        arm.position.set(0, 0, 0);
-        arm.rotation.set(0, 0, 0);
-        leftArmGroup = arm;
+        handData.arm.position.set(0, 0, 0);
+        handData.arm.rotation.set(0, 0, 0);
+        leftArmGroup = handData.arm;
+        leftThumbPivot = handData.thumbPivot;
         leftRestAnchor.add(leftArmGroup);
         steeringGroup.add(leftRestAnchor);
       }
     });
 
-    // Chrome gauge bezel + live digital/analog speedometer
-    const gaugeBody = new THREE.Mesh(new THREE.CylinderGeometry(0.086, 0.08, 0.032, 24), darkMetal);
-    gaugeBody.rotation.x = Math.PI * 0.34;
-    gaugeBody.position.set(0, 0.072, -0.068);
-    steeringGroup.add(gaugeBody);
+    // Wide Supersport Twin-Pod + TFT Digital Cockpit Instrument Cluster
+    const dashBezel = new THREE.Mesh(new THREE.BoxGeometry(0.23, 0.118, 0.034), carbonMat);
+    dashBezel.rotation.x = -Math.PI * 0.14;
+    dashBezel.position.set(0, 0.084, -0.072);
+    steeringGroup.add(dashBezel);
+
+    const dashTrimRing = new THREE.Mesh(new THREE.BoxGeometry(0.238, 0.124, 0.01), chromeMetal);
+    dashTrimRing.rotation.x = -Math.PI * 0.14;
+    dashTrimRing.position.set(0, 0.084, -0.068);
+    steeringGroup.add(dashTrimRing);
 
     const gaugeFace = new THREE.Mesh(
-      new THREE.CircleGeometry(0.078, 24),
+      new THREE.PlaneGeometry(0.218, 0.106),
       new THREE.MeshBasicMaterial({ map: dashTexture })
     );
-    gaugeFace.rotation.x = -Math.PI * 0.16;
-    gaugeFace.position.set(0, 0.083, -0.056);
+    gaugeFace.rotation.x = -Math.PI * 0.14;
+    gaugeFace.position.set(0, 0.086, -0.053);
     steeringGroup.add(gaugeFace);
 
-    // Smoked polycarbonate curved windscreen visor
-    const visorGeo = new THREE.CylinderGeometry(0.16, 0.19, 0.21, 18, 1, true, Math.PI * 0.68, Math.PI * 0.64);
+    // Smoked polycarbonate curved aero windscreen visor
+    const visorGeo = new THREE.CylinderGeometry(0.17, 0.205, 0.22, 20, 1, true, Math.PI * 0.66, Math.PI * 0.68);
     const visorMat = new THREE.MeshPhysicalMaterial({
       color: '#0f172a',
       transparent: true,
-      opacity: 0.42,
-      roughness: 0.08,
-      metalness: 0.2,
+      opacity: 0.36,
+      roughness: 0.06,
+      metalness: 0.22,
       side: THREE.DoubleSide,
     });
     const visor = new THREE.Mesh(visorGeo, visorMat);
     visor.rotation.x = 0.48;
-    visor.position.set(0, 0.16, -0.04);
+    visor.position.set(0, 0.165, -0.045);
     steeringGroup.add(visor);
 
     // Power-Up Aura 1: Translucent 3D Immunity Shield Dome
@@ -676,64 +921,186 @@
     bikeRoot.add(magnetAuraGroup);
   }
 
-  function updateDashTexture(kmh, braking, distanceMeters, powerups) {
+  function updateDashTexture(kmh, braking, distanceMeters, powerups, steerDir, hornHeld) {
     if (!dashCtx || !dashTexture) return;
     const g = dashCtx;
-    const w = 256;
-    const h = 256;
+    const w = 512;
+    const h = 512;
     g.clearRect(0, 0, w, h);
 
-    g.fillStyle = '#090d16';
+    // Brushed carbon-slate instrument panel background
+    const bgGrad = g.createLinearGradient(0, 0, 0, h);
+    bgGrad.addColorStop(0, '#020617');
+    bgGrad.addColorStop(0.5, '#0b1326');
+    bgGrad.addColorStop(1, '#020617');
+    g.fillStyle = bgGrad;
+    g.fillRect(0, 0, w, h);
+
+    g.strokeStyle = '#334155';
+    g.lineWidth = 8;
+    g.strokeRect(10, 10, w - 20, h - 20);
+
+    // Gear & RPM calculation
+    const gear = kmh < 5 ? 'N' : kmh < 28 ? '1' : kmh < 58 ? '2' : kmh < 94 ? '3' : kmh < 132 ? '4' : '5';
+    const rpmRatio = Math.max(0.12, Math.min(0.98, 0.14 + (kmh % 36) / 42 + kmh / 260));
+    const blinkOn = Math.floor(performance.now() * 0.0065) % 2 === 0;
+
+    // Top telltale strip (Left Turn / High Beam / Horn / ABS / Right Turn)
+    g.fillStyle = steerDir < -0.15 && blinkOn ? '#22c55e' : '#1e293b';
     g.beginPath();
-    g.arc(128, 128, 122, 0, Math.PI * 2);
+    g.moveTo(32, 48);
+    g.lineTo(66, 26);
+    g.lineTo(66, 70);
+    g.closePath();
     g.fill();
 
+    g.fillStyle = steerDir > 0.15 && blinkOn ? '#22c55e' : '#1e293b';
+    g.beginPath();
+    g.moveTo(w - 32, 48);
+    g.lineTo(w - 66, 26);
+    g.lineTo(w - 66, 70);
+    g.closePath();
+    g.fill();
+
+    // Telltale badges across top center
+    const badges = [
+      { label: 'HB', active: true, onColor: '#38bdf8' },
+      { label: 'HORN', active: Boolean(hornHeld), onColor: '#facc15' },
+      { label: 'BRK', active: Boolean(braking), onColor: '#ef4444' },
+      { label: 'N2O', active: Boolean(powerups && powerups.fuelBoost > 0), onColor: '#f97316' },
+      { label: 'SHD', active: Boolean(powerups && powerups.shield > 0), onColor: '#22d3ee' },
+    ];
+    badges.forEach((b, idx) => {
+      const bx = 92 + idx * 66;
+      g.fillStyle = b.active ? b.onColor : '#1e293b';
+      g.fillRect(bx, 28, 56, 32);
+      g.fillStyle = b.active ? '#020617' : '#64748b';
+      g.font = 'bold 16px monospace';
+      g.textAlign = 'center';
+      g.fillText(b.label, bx + 28, 50);
+    });
+
+    // Left Pod: Analog RPM Tachometer (center x=142, y=258, r=112)
+    const cx = 144;
+    const cy = 266;
+    const rad = 114;
+    g.fillStyle = '#090d16';
+    g.beginPath();
+    g.arc(cx, cy, rad, 0, Math.PI * 2);
+    g.fill();
     g.strokeStyle = '#64748b';
-    g.lineWidth = 8;
+    g.lineWidth = 6;
     g.stroke();
 
-    // Speedometer arc ticks
-    for (let i = 0; i <= 8; i += 1) {
-      const ang = Math.PI * 0.78 + (i / 8) * Math.PI * 1.44;
-      g.strokeStyle = i >= 6 ? '#ef4444' : '#38bdf8';
-      g.lineWidth = 4;
+    for (let i = 0; i <= 12; i += 1) {
+      const ang = Math.PI * 0.78 + (i / 12) * Math.PI * 1.44;
+      const isRedline = i >= 9;
+      g.strokeStyle = isRedline ? '#ef4444' : '#38bdf8';
+      g.lineWidth = i % 2 === 0 ? 5 : 3;
       g.beginPath();
-      g.moveTo(128 + Math.cos(ang) * 90, 128 + Math.sin(ang) * 90);
-      g.lineTo(128 + Math.cos(ang) * 108, 128 + Math.sin(ang) * 108);
+      g.moveTo(cx + Math.cos(ang) * (rad - 24), cy + Math.sin(ang) * (rad - 24));
+      g.lineTo(cx + Math.cos(ang) * (rad - 8), cy + Math.sin(ang) * (rad - 8));
       g.stroke();
+      if (i % 2 === 0) {
+        g.fillStyle = isRedline ? '#fca5a5' : '#e2e8f0';
+        g.font = 'bold 18px sans-serif';
+        g.textAlign = 'center';
+        g.fillText(String(i), cx + Math.cos(ang) * (rad - 40), cy + Math.sin(ang) * (rad - 40) + 6);
+      }
     }
 
-    // Needle
-    const ratio = Math.max(0, Math.min(1, kmh / 185));
-    const needleAng = Math.PI * 0.78 + ratio * Math.PI * 1.44;
+    g.fillStyle = '#94a3b8';
+    g.font = 'bold 13px sans-serif';
+    g.textAlign = 'center';
+    g.fillText('x1000 RPM', cx, cy + 62);
+
+    const nAng = Math.PI * 0.78 + rpmRatio * Math.PI * 1.44;
     g.strokeStyle = '#ef4444';
-    g.lineWidth = 6;
+    g.lineWidth = 7;
     g.lineCap = 'round';
     g.beginPath();
-    g.moveTo(128, 128);
-    g.lineTo(128 + Math.cos(needleAng) * 86, 128 + Math.sin(needleAng) * 86);
+    g.moveTo(cx, cy);
+    g.lineTo(cx + Math.cos(nAng) * (rad - 26), cy + Math.sin(nAng) * (rad - 26));
     g.stroke();
 
     g.fillStyle = '#e2e8f0';
     g.beginPath();
-    g.arc(128, 128, 12, 0, Math.PI * 2);
+    g.arc(cx, cy, 13, 0, Math.PI * 2);
     g.fill();
 
-    // Digital readout box
+    // Right Pod: High-Contrast TFT Digital Screen (x=276..486, y=104..408)
+    g.fillStyle = '#061428';
+    g.fillRect(276, 102, 212, 310);
+    g.strokeStyle = '#0ea5e9';
+    g.lineWidth = 3;
+    g.strokeRect(276, 102, 212, 310);
+
+    // Gear Indicator box top-right inside TFT
     g.fillStyle = '#0f172a';
-    g.fillRect(68, 152, 120, 56);
-    g.strokeStyle = '#334155';
-    g.lineWidth = 2;
-    g.strokeRect(68, 152, 120, 56);
-
-    g.fillStyle = powerups && powerups.fuelBoost > 0 ? '#fb923c' : '#38bdf8';
-    g.font = 'bold 34px monospace';
+    g.fillRect(424, 114, 52, 62);
+    g.strokeStyle = gear === 'N' ? '#22c55e' : '#facc15';
+    g.lineWidth = 3;
+    g.strokeRect(424, 114, 52, 62);
+    g.fillStyle = gear === 'N' ? '#4ade80' : '#facc15';
+    g.font = '900 40px monospace';
     g.textAlign = 'center';
-    g.fillText(`${Math.round(kmh)}`, 128, 184);
+    g.fillText(gear, 450, 160);
 
-    g.fillStyle = braking ? '#ef4444' : '#facc15';
+    // Big Speed Readout
+    g.fillStyle = powerups && powerups.fuelBoost > 0 ? '#fb923c' : '#f8fafc';
+    g.font = '900 72px monospace';
+    g.textAlign = 'left';
+    g.fillText(`${Math.round(kmh)}`, 288, 198);
+    g.fillStyle = '#38bdf8';
+    g.font = 'bold 20px sans-serif';
+    g.fillText('KM/H', 292, 224);
+
+    // Live RPM Shift Progress Bar
+    const barCount = 10;
+    const filledBars = Math.round(rpmRatio * barCount);
+    for (let b = 0; b < barCount; b += 1) {
+      g.fillStyle =
+        b >= filledBars
+          ? '#1e293b'
+          : b >= 8
+          ? '#ef4444'
+          : b >= 5
+          ? '#facc15'
+          : '#22c55e';
+      g.fillRect(288 + b * 19, 240, 15, 16);
+    }
+
+    // Distance Trip + Coolant + Battery telemetry rows
+    g.fillStyle = '#94a3b8';
     g.font = 'bold 16px monospace';
-    g.fillText(braking ? 'BRAKE' : `${Math.floor(distanceMeters)}m`, 128, 203);
+    g.textAlign = 'left';
+    g.fillText('TRIP', 290, 294);
+    g.fillStyle = '#facc15';
+    g.font = 'bold 28px monospace';
+    g.textAlign = 'right';
+    g.fillText(`${Math.floor(distanceMeters)}m`, 474, 296);
+
+    g.fillStyle = '#94a3b8';
+    g.font = 'bold 16px monospace';
+    g.textAlign = 'left';
+    g.fillText('ENG 84C', 290, 338);
+    g.fillText('14.2V', 416, 338);
+
+    // Bottom Fuel Bar + Active Magnet badge
+    g.fillStyle = '#94a3b8';
+    g.font = 'bold 15px sans-serif';
+    g.fillText('FUEL', 290, 384);
+    const fuelPct = powerups && powerups.fuelBoost > 0 ? 1 : 0.82;
+    g.fillStyle = '#1e293b';
+    g.fillRect(340, 368, 134, 20);
+    g.fillStyle = fuelPct > 0.9 ? '#f97316' : '#22c55e';
+    g.fillRect(342, 370, Math.round(130 * fuelPct), 16);
+
+    // Bottom status bar under analog tach
+    g.fillStyle = braking ? '#ef4444' : '#38bdf8';
+    g.font = '900 22px monospace';
+    g.textAlign = 'center';
+    g.fillText(braking ? 'ABS BRAKING' : hornHeld ? 'HORN ON' : 'BENDSKIN 237', 144, 462);
 
     dashTexture.needsUpdate = true;
   }
@@ -892,17 +1259,26 @@
         userData.brakeLights.push(tail.material);
       });
 
-      const leftSig = new THREE.Mesh(
-        new THREE.BoxGeometry(0.16, 0.14, 0.08),
-        new THREE.MeshBasicMaterial({ color: '#f59e0b' })
-      );
-      leftSig.position.set(-0.78, 0.54, 1.94);
-      leftSig.visible = false;
-      const rightSig = leftSig.clone();
-      rightSig.position.x = 0.78;
-      group.add(leftSig, rightSig);
-      userData.leftSig = leftSig;
-      userData.rightSig = rightSig;
+      const attachSignalHalo = (x, y, z, w, h) => {
+        const pod = new THREE.Group();
+        pod.position.set(x, y, z);
+        const core = new THREE.Mesh(
+          new THREE.BoxGeometry(w, h, 0.09),
+          new THREE.MeshBasicMaterial({ color: '#fbbf24' })
+        );
+        const glow = new THREE.Mesh(
+          new THREE.BoxGeometry(w * 2.1, h * 2.1, 0.04),
+          new THREE.MeshBasicMaterial({ color: '#f59e0b', transparent: true, opacity: 0.48 })
+        );
+        glow.position.z = 0.03;
+        pod.add(core, glow);
+        pod.visible = false;
+        group.add(pod);
+        return pod;
+      };
+
+      userData.leftSig = attachSignalHalo(-0.82, 0.54, 1.95, 0.2, 0.16);
+      userData.rightSig = attachSignalHalo(0.82, 0.54, 1.95, 0.2, 0.16);
 
       userData.wheels = addWheelMeshes(
         group,
@@ -949,6 +1325,22 @@
         tail.position.set(tx, 0.75, 2.09);
         group.add(tail);
         userData.brakeLights.push(tail.material);
+      });
+
+      [-1, 1].forEach((sSide) => {
+        const pod = new THREE.Group();
+        pod.position.set(sSide * 0.88, 0.52, 2.1);
+        pod.add(
+          new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.18, 0.08), new THREE.MeshBasicMaterial({ color: '#fbbf24' })),
+          new THREE.Mesh(
+            new THREE.BoxGeometry(0.42, 0.36, 0.04),
+            new THREE.MeshBasicMaterial({ color: '#f59e0b', transparent: true, opacity: 0.48 })
+          )
+        );
+        pod.visible = false;
+        group.add(pod);
+        if (sSide < 0) userData.leftSig = pod;
+        else userData.rightSig = pod;
       });
 
       userData.wheels = addWheelMeshes(
@@ -1011,6 +1403,22 @@
         userData.brakeLights.push(tail.material);
       });
 
+      [-1, 1].forEach((sSide) => {
+        const pod = new THREE.Group();
+        pod.position.set(sSide * 0.98, 0.82, 3.13);
+        pod.add(
+          new THREE.Mesh(new THREE.BoxGeometry(0.24, 0.2, 0.09), new THREE.MeshBasicMaterial({ color: '#fbbf24' })),
+          new THREE.Mesh(
+            new THREE.BoxGeometry(0.48, 0.4, 0.04),
+            new THREE.MeshBasicMaterial({ color: '#f59e0b', transparent: true, opacity: 0.52 })
+          )
+        );
+        pod.visible = false;
+        group.add(pod);
+        if (sSide < 0) userData.leftSig = pod;
+        else userData.rightSig = pod;
+      });
+
       userData.wheels = addWheelMeshes(
         group,
         [
@@ -1056,6 +1464,22 @@
       tail.position.set(0, 0.78, 0.9);
       group.add(tail);
       userData.brakeLights.push(tail.material);
+
+      [-1, 1].forEach((sSide) => {
+        const pod = new THREE.Group();
+        pod.position.set(sSide * 0.24, 0.78, 0.88);
+        pod.add(
+          new THREE.Mesh(new THREE.SphereGeometry(0.065, 8, 8), new THREE.MeshBasicMaterial({ color: '#fbbf24' })),
+          new THREE.Mesh(
+            new THREE.SphereGeometry(0.13, 8, 8),
+            new THREE.MeshBasicMaterial({ color: '#f59e0b', transparent: true, opacity: 0.45 })
+          )
+        );
+        pod.visible = false;
+        group.add(pod);
+        if (sSide < 0) userData.leftSig = pod;
+        else userData.rightSig = pod;
+      });
 
       userData.wheels = addWheelMeshes(
         group,
@@ -1242,9 +1666,15 @@
       renderer.outputEncoding = THREE.sRGBEncoding;
 
       scene = new THREE.Scene();
-      camera = new THREE.PerspectiveCamera(62, 16 / 9, 0.08, 280);
+      camera = new THREE.PerspectiveCamera(62, 16 / 9, 0.08, 380);
 
       buildProceduralTextures();
+      const maxAniso = renderer && renderer.capabilities
+        ? Math.min(8, renderer.capabilities.getMaxAnisotropy() || 4)
+        : 4;
+      Object.values(texCache).forEach((tex) => {
+        if (tex) tex.anisotropy = maxAniso;
+      });
       createEnvironment();
       buildBikeCockpit();
 
@@ -1257,12 +1687,26 @@
     }
   }
 
-  function resize(cssWidth, cssHeight) {
+  function resize(cssWidth, cssHeight, qualityMode) {
     if (!initialized || !renderer || !camera) return;
-    const dpr = Math.min(window.devicePixelRatio || 1, 2.5);
+    if (qualityMode === 'high' || qualityMode === 'ultra') {
+      currentQualityMode = qualityMode;
+    }
+    const w = Math.max(1, cssWidth);
+    const h = Math.max(1, cssHeight);
+    const shortSide = Math.min(w, h);
+    const sysDpr = window.devicePixelRatio || 1;
+    let dpr;
+    if (currentQualityMode === 'ultra') {
+      // Guarantee true 720p+ crisp backing resolution on every device screen
+      const scale720p = 720 / shortSide;
+      dpr = Math.min(3.0, Math.max(sysDpr, scale720p, 1.85));
+    } else {
+      dpr = Math.min(2.0, Math.max(sysDpr, 1.25));
+    }
     renderer.setPixelRatio(dpr);
-    renderer.setSize(Math.max(1, cssWidth), Math.max(1, cssHeight), false);
-    camera.aspect = Math.max(0.25, cssWidth / Math.max(1, cssHeight));
+    renderer.setSize(w, h, false);
+    camera.aspect = Math.max(0.25, w / h);
     camera.updateProjectionMatrix();
   }
 
@@ -1278,6 +1722,9 @@
       suspensionPitch,
       speedKmh,
       braking,
+      throttling,
+      hornHeld,
+      steerDir,
       distanceMeters,
       rattleTimer,
       celebrationTimer,
@@ -1290,7 +1737,16 @@
       rivalMeters,
       powerups,
       crashShakeTimer,
+      quality,
     } = state;
+
+    if (quality && quality !== currentQualityMode) {
+      currentQualityMode = quality;
+      const rect = canvas3d ? canvas3d.getBoundingClientRect() : null;
+      if (rect && rect.width > 0 && rect.height > 0) {
+        resize(rect.width, rect.height, quality);
+      }
+    }
 
     // Smooth road texture scrolling synced 1:1 with world meters
     if (roadTexture) {
@@ -1321,7 +1777,7 @@
     camera.lookAt(camX * 0.85, 1.18 - suspensionPitch * 0.01, -30);
     camera.rotation.z += worldRollAngle * 1.15;
 
-    // Position 3D bike rig squarely inside rider view & road lane
+    // Position 3D bike rig & animate fingers, lever, throttle wrist, thumb horn switch
     if (bikeRoot && steeringGroup) {
       const bob = Math.sin(engineVibPhase) * 0.004;
       const wheelie =
@@ -1331,10 +1787,20 @@
 
       steeringGroup.rotation.y = -handlebarAngle * 0.72;
       if (rightBrakeLever) {
-        rightBrakeLever.rotation.y = braking ? -0.22 : 0;
+        rightBrakeLever.rotation.y = braking ? -0.24 : 0;
+      }
+      if (rightLeverFingersGroup) {
+        rightLeverFingersGroup.rotation.x = braking ? 0.42 : -0.08;
       }
       if (rightFingersGroup) {
-        rightFingersGroup.rotation.x = braking ? 0.28 : 0;
+        rightFingersGroup.rotation.x = braking ? 0.14 : 0;
+      }
+      if (rightGripPivot) {
+        rightGripPivot.rotation.x = !braking && throttling ? 0.09 : 0;
+      }
+      if (leftThumbPivot) {
+        leftThumbPivot.rotation.y = hornHeld ? -0.42 : 0;
+        leftThumbPivot.rotation.x = hornHeld ? 0.25 : 0;
       }
       if (leftArmGroup) {
         if (celebrationTimer > 0) {
@@ -1372,7 +1838,14 @@
         }
       }
 
-      updateDashTexture(kmhOrZero(speedKmh, state.isRunning), braking, distanceMeters, powerups);
+      updateDashTexture(
+        kmhOrZero(speedKmh, state.isRunning),
+        braking,
+        distanceMeters,
+        powerups,
+        steerDir || 0,
+        hornHeld
+      );
     }
 
     // Target lines on asphalt
@@ -1436,7 +1909,7 @@
       const laneFloat = typeof entity.visualLane === 'number' ? entity.visualLane : entity.lane;
       mesh.position.set(laneToWorldX(laneFloat), 0, -ahead);
 
-      // Rotate vehicle wheels & tilt slightly when yielding lanes
+      // Rotate vehicle wheels, tilt gently on lane change, and flash amber turn-signals in advance
       const ud = mesh.userData;
       if (ud) {
         if (ud.wheels && ud.wheels.length > 0) {
@@ -1452,11 +1925,12 @@
           }
         }
         const laneErr = entity.lane - laneFloat;
-        mesh.rotation.y = Math.abs(laneErr) > 0.02 ? laneErr * -0.22 : 0;
+        mesh.rotation.y = Math.abs(laneErr) > 0.02 ? laneErr * -0.2 : 0;
         if (ud.leftSig && ud.rightSig) {
-          const blink = Math.floor(nowSec * 8) % 2 === 0;
-          ud.leftSig.visible = laneErr < -0.02 && blink;
-          ud.rightSig.visible = laneErr > 0.02 && blink;
+          const blink = Math.floor(nowSec * 7.5) % 2 === 0;
+          const sigDir = entity.signalDir || (laneErr < -0.02 ? -1 : laneErr > 0.02 ? 1 : 0);
+          ud.leftSig.visible = sigDir === -1 && blink;
+          ud.rightSig.visible = sigDir === 1 && blink;
         }
         if (ud.spinTarget) {
           ud.spinTarget.rotation.y = nowSec * 2.6 + entity.worldZ * 0.2;
@@ -1484,10 +1958,363 @@
     return isRunning ? speedKmh : 0;
   }
 
+  // =========================================================
+  // Full 3D Motorcycle Showroom Viewer (Garage Modal)
+  // =========================================================
+  function buildFullMotorcycleMesh(bikeId) {
+    const liv = getBikeLivery(bikeId);
+    const bike = new THREE.Group();
+
+    const paintMat = new THREE.MeshPhysicalMaterial({
+      color: liv.paint,
+      roughness: 0.16,
+      metalness: 0.5,
+      clearcoat: 1.0,
+      clearcoatRoughness: 0.1,
+    });
+    const trimMat = new THREE.MeshStandardMaterial({
+      color: liv.trim,
+      roughness: 0.25,
+      metalness: 0.85,
+    });
+    const frameMat = new THREE.MeshStandardMaterial({
+      color: liv.frame,
+      roughness: 0.45,
+      metalness: 0.65,
+    });
+    const chromeMat = new THREE.MeshStandardMaterial({
+      color: '#e2e8f0',
+      roughness: 0.14,
+      metalness: 0.94,
+    });
+    const tireMat = new THREE.MeshStandardMaterial({
+      color: '#090d16',
+      roughness: 0.88,
+      metalness: 0.08,
+    });
+    const seatMat = new THREE.MeshStandardMaterial({
+      color: liv.seat,
+      roughness: 0.72,
+      metalness: 0.1,
+    });
+
+    // Helper for front/rear detailed motorcycle wheel + drilled brake disc
+    function makeMotoWheel(zPos, radius, width) {
+      const wg = new THREE.Group();
+      wg.position.set(0, radius, zPos);
+
+      const tire = new THREE.Mesh(new THREE.TorusGeometry(radius - 0.055, 0.075, 14, 28), tireMat);
+      tire.rotation.y = Math.PI / 2;
+      tire.castShadow = true;
+      wg.add(tire);
+
+      const rim = new THREE.Mesh(new THREE.TorusGeometry(radius - 0.115, 0.025, 10, 24), trimMat);
+      rim.rotation.y = Math.PI / 2;
+      wg.add(rim);
+
+      const hub = new THREE.Mesh(new THREE.CylinderGeometry(0.065, 0.065, width * 0.85, 12), chromeMat);
+      hub.rotation.z = Math.PI / 2;
+      wg.add(hub);
+
+      for (let sp = 0; sp < 5; sp += 1) {
+        const spoke = new THREE.Mesh(new THREE.BoxGeometry(0.022, (radius - 0.11) * 1.9, 0.026), frameMat);
+        spoke.rotation.x = (sp * Math.PI) / 5;
+        wg.add(spoke);
+      }
+
+      const disc = new THREE.Mesh(new THREE.CylinderGeometry(radius * 0.56, radius * 0.56, 0.015, 22), chromeMat);
+      disc.rotation.z = Math.PI / 2;
+      disc.position.x = 0.065;
+      wg.add(disc);
+
+      const caliper = new THREE.Mesh(
+        new THREE.BoxGeometry(0.04, 0.085, 0.06),
+        new THREE.MeshStandardMaterial({ color: '#ef4444', roughness: 0.3, metalness: 0.4 })
+      );
+      caliper.position.set(0.072, radius * 0.36, 0.06);
+      wg.add(caliper);
+
+      return wg;
+    }
+
+    bike.add(makeMotoWheel(-0.78, 0.33, 0.14)); // Front wheel
+    bike.add(makeMotoWheel(0.76, 0.34, 0.18));  // Rear fat tire
+
+    // Rear swingarm + twin shock springs
+    [-0.1, 0.1].forEach((sideX) => {
+      const arm = new THREE.Mesh(new THREE.BoxGeometry(0.036, 0.06, 0.65), frameMat);
+      arm.position.set(sideX, 0.36, 0.48);
+      arm.rotation.x = 0.1;
+      bike.add(arm);
+
+      const spring = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, 0.32, 10), trimMat);
+      spring.position.set(sideX * 1.15, 0.52, 0.44);
+      spring.rotation.x = -0.35;
+      bike.add(spring);
+    });
+
+    // Air-cooled / DOHC engine crankcase block + cooling fins + chrome cylinder head
+    const engineBlock = new THREE.Mesh(
+      new THREE.BoxGeometry(0.28, 0.28, 0.34),
+      new THREE.MeshStandardMaterial({ color: '#475569', roughness: 0.38, metalness: 0.72 })
+    );
+    engineBlock.position.set(0, 0.44, 0.02);
+    engineBlock.castShadow = true;
+    bike.add(engineBlock);
+
+    for (let fin = 0; fin < 4; fin += 1) {
+      const finMesh = new THREE.Mesh(new THREE.BoxGeometry(0.32, 0.014, 0.24), chromeMat);
+      finMesh.position.set(0, 0.5 + fin * 0.035, -0.02);
+      bike.add(finMesh);
+    }
+
+    // Diamond tubular chassis rails
+    [-0.1, 0.1].forEach((rx) => {
+      const rail = new THREE.Mesh(new THREE.BoxGeometry(0.035, 0.055, 0.85), frameMat);
+      rail.position.set(rx, 0.68, 0.05);
+      rail.rotation.x = 0.22;
+      bike.add(rail);
+    });
+
+    // Swept chrome exhaust header pipe + angled megaphone muffler
+    const exPipe = new THREE.Mesh(new THREE.CylinderGeometry(0.028, 0.028, 0.58, 12), chromeMat);
+    exPipe.rotation.x = Math.PI / 2 - 0.16;
+    exPipe.position.set(0.17, 0.27, 0.25);
+    bike.add(exPipe);
+    const muffler = new THREE.Mesh(new THREE.CylinderGeometry(0.055, 0.04, 0.48, 14), chromeMat);
+    muffler.rotation.x = Math.PI / 2 + 0.18;
+    muffler.position.set(0.18, 0.38, 0.68);
+    bike.add(muffler);
+
+    // Sculpted Fuel Tank + Center Racing Stripe + Chrome Cap
+    const tank = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.21, 0.52, 20), paintMat);
+    tank.rotation.x = Math.PI * 0.44;
+    tank.scale.set(1.18, 1, 0.78);
+    tank.position.set(0, 0.83, -0.12);
+    tank.castShadow = true;
+    bike.add(tank);
+
+    const tStripe = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.015, 0.42), trimMat);
+    tStripe.position.set(0, 0.94, -0.11);
+    tStripe.rotation.x = -0.16;
+    bike.add(tStripe);
+
+    const tCap = new THREE.Mesh(new THREE.CylinderGeometry(0.036, 0.038, 0.018, 14), chromeMat);
+    tCap.position.set(0, 0.96, -0.17);
+    bike.add(tCap);
+
+    // Two-up stitched Bendskin Seat + Tail Cowling + Ruby LED Taillight + Rear Fender
+    const seatBase = new THREE.Mesh(new THREE.BoxGeometry(0.26, 0.1, 0.68), seatMat);
+    seatBase.position.set(0, 0.78, 0.38);
+    seatBase.rotation.x = 0.08;
+    seatBase.castShadow = true;
+    bike.add(seatBase);
+
+    const tailCowl = new THREE.Mesh(new THREE.BoxGeometry(0.24, 0.11, 0.26), paintMat);
+    tailCowl.position.set(0, 0.81, 0.76);
+    tailCowl.rotation.x = -0.14;
+    bike.add(tailCowl);
+
+    const tailLamp = new THREE.Mesh(
+      new THREE.BoxGeometry(0.14, 0.06, 0.04),
+      new THREE.MeshBasicMaterial({ color: '#ef4444' })
+    );
+    tailLamp.position.set(0, 0.78, 0.9);
+    bike.add(tailLamp);
+
+    const rearFender = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.03, 0.32), frameMat);
+    rearFender.position.set(0, 0.62, 0.92);
+    rearFender.rotation.x = 0.78;
+    bike.add(rearFender);
+
+    // Front Telescopic Gold/Alloy Forks + Front Fender + Circular LED Headlight + Windscreen + Handlebars
+    [-0.1, 0.1].forEach((fx) => {
+      const fork = new THREE.Mesh(new THREE.CylinderGeometry(0.025, 0.028, 0.66, 12), trimMat);
+      fork.position.set(fx, 0.63, -0.62);
+      fork.rotation.x = -0.38;
+      fork.castShadow = true;
+      bike.add(fork);
+    });
+
+    const frontFender = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.32, 0.32, 0.16, 16, 1, false, -0.45, 0.9),
+      paintMat
+    );
+    frontFender.rotation.z = Math.PI / 2;
+    frontFender.position.set(0, 0.36, -0.77);
+    bike.add(frontFender);
+
+    const headlightHousing = new THREE.Mesh(new THREE.CylinderGeometry(0.11, 0.095, 0.12, 16), frameMat);
+    headlightHousing.rotation.x = Math.PI / 2;
+    headlightHousing.position.set(0, 0.84, -0.66);
+    bike.add(headlightHousing);
+
+    const headlightLens = new THREE.Mesh(
+      new THREE.CircleGeometry(0.098, 18),
+      new THREE.MeshBasicMaterial({ color: '#fef9c3' })
+    );
+    headlightLens.rotation.y = Math.PI;
+    headlightLens.position.set(0, 0.84, -0.725);
+    bike.add(headlightLens);
+
+    const miniVisor = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.13, 0.16, 0.18, 14, 1, true, Math.PI * 0.68, Math.PI * 0.64),
+      new THREE.MeshPhysicalMaterial({ color: '#0f172a', transparent: true, opacity: 0.45, side: THREE.DoubleSide })
+    );
+    miniVisor.position.set(0, 0.98, -0.58);
+    miniVisor.rotation.x = 0.45;
+    bike.add(miniVisor);
+
+    // Wide Handlebars + Grips + Mirrors
+    const hbar = new THREE.Mesh(new THREE.CylinderGeometry(0.016, 0.016, 0.64, 10), chromeMat);
+    hbar.rotation.z = Math.PI / 2;
+    hbar.position.set(0, 0.96, -0.46);
+    bike.add(hbar);
+
+    [-1, 1].forEach((side) => {
+      const mStalk = new THREE.Mesh(new THREE.CylinderGeometry(0.007, 0.007, 0.14, 8), frameMat);
+      mStalk.rotation.z = -side * 0.35;
+      mStalk.position.set(side * 0.24, 1.04, -0.46);
+      bike.add(mStalk);
+
+      const mMirror = new THREE.Mesh(new THREE.BoxGeometry(0.09, 0.05, 0.018), frameMat);
+      mMirror.position.set(side * 0.28, 1.11, -0.46);
+      bike.add(mMirror);
+    });
+
+    // Side Stand leaning faintly or showroom plinth alignment
+    const gauge = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.06, 0.05), frameMat);
+    gauge.position.set(0, 0.96, -0.56);
+    gauge.rotation.x = -0.3;
+    bike.add(gauge);
+
+    return bike;
+  }
+
+  function initGaragePreview(canvasEl, bikeId) {
+    if (!canvasEl || !isSupported()) return false;
+    garageLiveryId = BIKE_LIVERIES[bikeId] ? bikeId : 'classic';
+
+    if (!garageRenderer) {
+      try {
+        garageRenderer = new THREE.WebGLRenderer({
+          canvas: canvasEl,
+          antialias: true,
+          alpha: true,
+          powerPreference: 'high-performance',
+        });
+        garageRenderer.shadowMap.enabled = true;
+        garageRenderer.toneMapping = THREE.ACESFilmicToneMapping;
+        garageRenderer.toneMappingExposure = 1.18;
+        garageRenderer.outputEncoding = THREE.sRGBEncoding;
+
+        garageScene = new THREE.Scene();
+        garageCamera = new THREE.PerspectiveCamera(38, 2.1, 0.1, 40);
+        garageCamera.position.set(2.35, 1.25, 2.25);
+        garageCamera.lookAt(0, 0.56, 0);
+
+        garageScene.add(new THREE.HemisphereLight('#fde68a', '#0f172a', 0.95));
+        const keyLight = new THREE.DirectionalLight('#fffbeb', 1.6);
+        keyLight.position.set(3.5, 5, 4);
+        keyLight.castShadow = true;
+        garageScene.add(keyLight);
+
+        const rimLight = new THREE.DirectionalLight('#38bdf8', 1.05);
+        rimLight.position.set(-4, 2.5, -3);
+        garageScene.add(rimLight);
+
+        garageTurntable = new THREE.Group();
+        const plinth = new THREE.Mesh(
+          new THREE.CylinderGeometry(1.38, 1.48, 0.12, 36),
+          new THREE.MeshStandardMaterial({ color: '#1e293b', roughness: 0.32, metalness: 0.78 })
+        );
+        plinth.position.y = -0.06;
+        plinth.receiveShadow = true;
+        const rimGlow = new THREE.Mesh(
+          new THREE.TorusGeometry(1.38, 0.02, 8, 40),
+          new THREE.MeshBasicMaterial({ color: '#facc15' })
+        );
+        rimGlow.rotation.x = Math.PI / 2;
+        garageTurntable.add(plinth, rimGlow);
+        garageTurntable.rotation.y = 0.65;
+        garageScene.add(garageTurntable);
+
+        canvasEl.addEventListener('pointerdown', (ev) => {
+          garageDragActive = true;
+          garageLastPointerX = ev.clientX;
+        });
+        window.addEventListener('pointermove', (ev) => {
+          if (!garageDragActive || !garageTurntable) return;
+          const dx = ev.clientX - garageLastPointerX;
+          garageLastPointerX = ev.clientX;
+          garageTurntable.rotation.y += dx * 0.012;
+        });
+        window.addEventListener('pointerup', () => {
+          garageDragActive = false;
+        });
+      } catch {
+        return false;
+      }
+    }
+
+    const rect = canvasEl.getBoundingClientRect();
+    const cw = Math.max(260, rect.width || canvasEl.width || 460);
+    const ch = Math.max(140, rect.height || canvasEl.height || 178);
+    garageRenderer.setPixelRatio(Math.min(2.5, window.devicePixelRatio || 1));
+    garageRenderer.setSize(cw, ch, false);
+    garageCamera.aspect = cw / ch;
+    garageCamera.updateProjectionMatrix();
+
+    setGarageBike(garageLiveryId);
+
+    if (!garageRafId) {
+      let lastT = performance.now();
+      const tickGarage = (nowT) => {
+        if (!garageRenderer || !garageScene || !garageCamera) return;
+        const dt = Math.min(0.05, Math.max(0.001, (nowT - lastT) * 0.001));
+        lastT = nowT;
+        if (garageTurntable && !garageDragActive) {
+          garageTurntable.rotation.y += dt * garageSpinSpeed;
+        }
+        garageRenderer.render(garageScene, garageCamera);
+        garageRafId = window.requestAnimationFrame(tickGarage);
+      };
+      garageRafId = window.requestAnimationFrame(tickGarage);
+    }
+    return true;
+  }
+
+  function setGarageBike(bikeId) {
+    garageLiveryId = BIKE_LIVERIES[bikeId] ? bikeId : 'classic';
+    if (!garageTurntable) return;
+    // Remove previous bike child (keeping turntable plinth + glow ring at indices 0,1)
+    for (let i = garageTurntable.children.length - 1; i >= 0; i -= 1) {
+      const ch = garageTurntable.children[i];
+      if (ch.userData && ch.userData.isShowroomBike) {
+        garageTurntable.remove(ch);
+      }
+    }
+    const model = buildFullMotorcycleMesh(garageLiveryId);
+    model.userData.isShowroomBike = true;
+    garageTurntable.add(model);
+  }
+
+  function stopGaragePreview() {
+    garageDragActive = false;
+    if (garageRafId) {
+      window.cancelAnimationFrame(garageRafId);
+      garageRafId = null;
+    }
+  }
+
   window.BendskinUltra3D = {
     isSupported,
     init,
     resize,
     renderFrame,
+    setCockpitLivery,
+    initGaragePreview,
+    setGarageBike,
+    stopGaragePreview,
   };
 })();

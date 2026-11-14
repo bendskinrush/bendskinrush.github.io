@@ -281,13 +281,18 @@
               <span class="pedal-title">HORN</span>
               <span class="pedal-sub">HOLD</span>
             </button>
-            <button id="pedal-brake" class="thumb-pedal pedal-brake" type="button" aria-label="Brake pedal">
+            <button id="pedal-brake" class="thumb-pedal car-pedal pedal-brake" type="button" aria-label="Brake car pedal">
+              <span class="car-pedal-pad brake-pad" aria-hidden="true">
+                <span class="car-pedal-treads"></span>
+              </span>
               <span class="pedal-title">BRAKE</span>
-              <span class="pedal-sub">HOLD</span>
             </button>
-            <button id="pedal-gas" class="thumb-pedal pedal-gas hidden" type="button" aria-label="Gas pedal">
+            <button id="pedal-gas" class="thumb-pedal car-pedal pedal-gas hidden" type="button" aria-label="Accelerator gas car pedal">
+              <span class="car-pedal-pad gas-pad" aria-hidden="true">
+                <span class="car-pedal-rivets"></span>
+                <span class="car-pedal-treads gas-treads"></span>
+              </span>
               <span class="pedal-title">GAS</span>
-              <span class="pedal-sub">DRIVE</span>
             </button>
           </div>
         </div>
@@ -731,24 +736,24 @@
             <div class="settings-group">
               <div class="settings-label-row">
                 <span class="settings-label">Graphics Quality</span>
-                <span class="settings-badge">3D Engine</span>
+                <span class="settings-badge">720p+ 3D Engine</span>
               </div>
               <div class="quality-grid" role="group" aria-label="Graphics Quality">
                 <button id="btn-quality-low" class="seg-btn" type="button" data-quality="low">
-                  Low 2D
+                  Low
                 </button>
                 <button id="btn-quality-normal" class="seg-btn" type="button" data-quality="normal">
                   Normal
                 </button>
                 <button id="btn-quality-high" class="seg-btn" type="button" data-quality="high">
-                  High 3D
+                  High HD
                 </button>
                 <button id="btn-quality-ultra" class="seg-btn active" type="button" data-quality="ultra">
-                  Ultra HD+
+                  Ultra HD 720p+
                 </button>
               </div>
               <p id="graphics-quality-desc" class="settings-hint">
-                Ultra HD+ active: 3D multi-story city buildings, billboards, truck cabs, dynamic headlights, mirror reflections &amp; 3x crispness.
+                Ultra HD 720p+ active: crisp 720p+ 3D engine with visible rider fingers &amp; gloves, twin-pod digital/analog dashboard, turn signals &amp; city blocks.
               </p>
             </div>
 
@@ -766,7 +771,25 @@
                 </button>
               </div>
               <p id="drive-mode-desc" class="settings-hint">
-                Bike accelerates automatically; tap or hold Brake on the bottom-right to slow before tight traffic.
+                Bike accelerates automatically; hold the Brake car pedal to slow down before tight traffic.
+              </p>
+            </div>
+
+            <div class="settings-group">
+              <div class="settings-label-row">
+                <span class="settings-label">Handedness (Control Side)</span>
+                <span class="settings-badge">Mobile UI</span>
+              </div>
+              <div class="segmented-control" role="group" aria-label="Control Handedness">
+                <button id="btn-hand-right" class="seg-btn active" type="button">
+                  Right-Handed (Arrows L • Pedals R)
+                </button>
+                <button id="btn-hand-left" class="seg-btn" type="button">
+                  Left-Handed (Pedals L • Arrows R)
+                </button>
+              </div>
+              <p id="hand-layout-desc" class="settings-hint">
+                Right-Handed layout: &lt; &gt; steering arrows on the Left, Car Pedals &amp; Horn on the Right.
               </p>
             </div>
 
@@ -842,29 +865,40 @@
             <strong id="garage-coin-balance" class="garage-coin-total">0 COINS</strong>
           </div>
 
+          <div class="garage-showroom">
+            <canvas id="garage-bike-canvas" width="460" height="220" aria-label="Full 3D motorcycle turntable preview"></canvas>
+            <div class="garage-showroom-overlay">
+              <span class="garage-preview-badge">FULL 3D BIKE • DRAG TO SPIN</span>
+              <div class="garage-preview-meta">
+                <strong id="garage-preview-name">Bendskin Classic 125</strong>
+                <span id="garage-preview-specs">125cc Street • Agile Handling</span>
+              </div>
+            </div>
+          </div>
+
           <div class="garage-grid">
-            <article class="garage-card active-bike">
+            <article class="garage-card garage-bike-card active-bike" data-garage-bike="classic" tabindex="0">
               <div class="garage-card-top">
                 <strong>Bendskin Classic 125</strong>
                 <span class="garage-tag owned">ACTIVE</span>
               </div>
-              <p>Nimble city street bike tuned for Douala &amp; Bamenda traffic weaving.</p>
+              <p>Nimble crimson-gold city bike tuned for Douala &amp; Bamenda traffic weaving.</p>
             </article>
 
-            <article class="garage-card soon">
+            <article class="garage-card garage-bike-card soon" data-garage-bike="sport" tabindex="0">
               <div class="garage-card-top">
                 <strong>Okada Sport 250</strong>
-                <span class="garage-tag soon">COMING SOON</span>
+                <span class="garage-tag soon">PREVIEW • SOON</span>
               </div>
-              <p>Sharper lean handling, reinforced suspension &amp; faster acceleration (500 Coins).</p>
+              <p>Tap to inspect full 3D blue sport chassis &amp; twin discs (500 Coins soon).</p>
             </article>
 
-            <article class="garage-card soon">
+            <article class="garage-card garage-bike-card soon" data-garage-bike="superbike" tabindex="0">
               <div class="garage-card-top">
                 <strong>Douala Superbike 600</strong>
-                <span class="garage-tag soon">COMING SOON</span>
+                <span class="garage-tag soon">PREVIEW • SOON</span>
               </div>
-              <p>Twin-exhaust superbike with extended Nitro &amp; Shield duration (1,500 Coins).</p>
+              <p>Tap to inspect full 3D gold/carbon 600cc superbike (1,500 Coins soon).</p>
             </article>
 
             <article class="garage-card soon">
@@ -872,7 +906,7 @@
                 <strong>Workshop Upgrades</strong>
                 <span class="garage-tag soon">COMING SOON</span>
               </div>
-              <p>Upgrade Top Speed, Nitro Fuel Boost, Magnet Range &amp; Shield Core using your collected Coins!</p>
+              <p>Upgrade Top Speed, Nitro Fuel Boost, Magnet Range &amp; Shield Core using your account Coins!</p>
             </article>
           </div>
 
@@ -915,15 +949,15 @@
             <article id="panel-about" class="about-panel" data-about-panel="about">
               <h3>Welcome to Bendskin Rush</h3>
               <p>
-                <strong>Bendskin Rush</strong> is a lightweight, 60 FPS first-person urban motorcycle racing game built for instant play in mobile and desktop browsers. Weave between yellow taxis, commercial vans, timber trucks, potholes, and road barriers while chasing your personal best and city leaderboard rank.
+                <strong>Bendskin Rush</strong> is a 720p+ first-person urban motorcycle racing game built for instant play in mobile and desktop browsers. Weave smoothly between yellow taxis, clando vans, timber trucks, rival riders, and road barriers while chasing your personal best and city leaderboard rank.
               </p>
-              <h4>How to Ride, Horn, Power-Ups &amp; Controls</h4>
+              <h4>How to Ride, Signals, Handedness &amp; Controls</h4>
               <ul>
-                <li><strong>Desktop Keyboard:</strong> <code>← / →</code> or <code>A / D</code> steer smoothly; <code>↑ / W</code> throttle; <code>↓ / S</code> brake; <strong>hold <code>Space</code></strong> for continuous Moto Horn (cars ahead move aside!); <code>Esc</code> or <code>P</code> opens Pause Menu (navigate with <code>↑ / ↓</code> and press <code>Enter</code>).</li>
-                <li><strong>Mobile Controls:</strong> Use left <code>&lt; / &gt;</code> arrow buttons or swipe to steer (enable smooth continuous <em>Phone Tilt</em> in Settings if desired). Hold <strong>HORN</strong> to clear traffic, and hold <strong>BRAKE</strong> / <strong>GAS</strong> on the right.</li>
-                <li><strong>Coins &amp; Garage:</strong> Collect spinning Gold Coins on the road (<code>+10 Coins</code>) and earn <code>+1 Coin</code> on every Sharp Dodge! Save Coins for upcoming bikes &amp; upgrades in the <strong>Garage</strong>.</li>
-                <li><strong>Timed Power-Ups:</strong> Grab <strong>Nitro Fuel</strong> for a timed high-speed surge, <strong>Shield</strong> for full obstacle immunity, and <strong>Magnet</strong> to pull all road coins straight to your bike!</li>
-                <li><strong>Real 3D Ultra HD:</strong> Choose <em>Low 2D</em>, <em>Normal</em>, <em>High 3D</em>, or <em>Ultra HD+ (Real WebGL 3D with detailed bike &amp; rider hands)</em> in Settings.</li>
+                <li><strong>Desktop Keyboard:</strong> <code>← / →</code> or <code>A / D</code> steer smoothly; <code>↑ / W</code> throttle; <code>↓ / S</code> brake; <strong>hold <code>Space</code></strong> for continuous Moto Horn (traffic blinks &amp; yields aside!); <code>Esc</code> or <code>P</code> opens Pause Menu (navigate with <code>↑ / ↓</code> and press <code>Enter</code>).</li>
+                <li><strong>Mobile Car Pedals &amp; Left/Right-Handed Swap:</strong> Use <code>&lt; / &gt;</code> steering arrows or swipe (switch <em>Left-Handed / Right-Handed</em> in Settings to swap steering arrows and the car-style <strong>GAS / BRAKE</strong> foot pedals between Left and Right).</li>
+                <li><strong>Vehicle Turn Signals:</strong> Watch every car, van, truck, and rival bike flash its amber turn-signal indicator before changing lanes so you can react cleanly at high speed.</li>
+                <li><strong>Per-Account Coins &amp; Full-Bike Garage:</strong> Collect spinning Gold Coins (<code>+10</code>) and Sharp Dodges (<code>+1</code>) stored privately per account. Open <strong>Garage</strong> to inspect every motorcycle in full rotatable 3D!</li>
+                <li><strong>720p+ Graphics Ladder:</strong> Choose <em>Low</em>, <em>Normal</em>, <em>High HD</em> (3D WebGL), or <em>Ultra HD 720p+</em> (visible rider fingers, detailed digital/analog dashboard &amp; crisp 720p+ rendering) in Settings.</li>
               </ul>
             </article>
 
