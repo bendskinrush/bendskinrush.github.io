@@ -1,0 +1,888 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, minimum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="theme-color" content="#07090e">
+  <title>Bendskin Rush — First-Person Moto Arcade Racing</title>
+  <link rel="icon" type="image/svg+xml" href="/assets/logo.svg">
+  <link rel="shortcut icon" href="/assets/logo.svg">
+  <link rel="apple-touch-icon" href="/assets/logo.svg">
+  <meta name="description" content="Weave through city traffic, control throttle and brakes in first-person, dodge potholes, and defend your location on the live leaderboard.">
+  <meta property="og:type" content="website">
+  <meta property="og:title" content="Bendskin Rush — High-Speed Street Moto Racing">
+  <meta property="og:description" content="Weave through city traffic, control throttle and brakes in first-person, and climb the live city leaderboard.">
+  <meta property="og:image" content="./assets/og-preview.jpg">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="Bendskin Rush — High-Speed Street Moto Racing">
+  <meta name="twitter:description" content="Weave through city traffic, control throttle and brakes in first-person, and climb the live city leaderboard.">
+  <meta name="twitter:image" content="./assets/og-preview.jpg">
+  <link rel="stylesheet" href="style.css">
+  <meta name="google-adsense-account" content="ca-pub-4032050439057511">
+  <script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-4032050439057511"
+       crossorigin="anonymous"></script>
+  <script src="game.js" defer></script>
+</head>
+<body>
+  <svg id="game-icon-defs" aria-hidden="true" width="0" height="0" style="position:absolute;width:0;height:0;overflow:hidden">
+    <defs>
+      <linearGradient id="giGold" x1="0%" y1="0%" x2="100%" y2="100%">
+        <stop offset="0%" stop-color="#fef08a" />
+        <stop offset="50%" stop-color="#f59e0b" />
+        <stop offset="100%" stop-color="#b45309" />
+      </linearGradient>
+      <linearGradient id="giCyan" x1="0%" y1="0%" x2="100%" y2="100%">
+        <stop offset="0%" stop-color="#e0f2fe" />
+        <stop offset="50%" stop-color="#38bdf8" />
+        <stop offset="100%" stop-color="#0284c7" />
+      </linearGradient>
+      <linearGradient id="giSteel" x1="0%" y1="0%" x2="100%" y2="100%">
+        <stop offset="0%" stop-color="#f8fafc" />
+        <stop offset="55%" stop-color="#94a3b8" />
+        <stop offset="100%" stop-color="#475569" />
+      </linearGradient>
+      <linearGradient id="giDark" x1="0%" y1="0%" x2="0%" y2="100%">
+        <stop offset="0%" stop-color="#1e293b" />
+        <stop offset="100%" stop-color="#090d16" />
+      </linearGradient>
+      <linearGradient id="giFlame" x1="0%" y1="0%" x2="100%" y2="100%">
+        <stop offset="0%" stop-color="#fde047" />
+        <stop offset="55%" stop-color="#f97316" />
+        <stop offset="100%" stop-color="#dc2626" />
+      </linearGradient>
+      <linearGradient id="giGreen" x1="0%" y1="0%" x2="100%" y2="100%">
+        <stop offset="0%" stop-color="#86efac" />
+        <stop offset="55%" stop-color="#22c55e" />
+        <stop offset="100%" stop-color="#15803d" />
+      </linearGradient>
+
+      <symbol id="icon-play" viewBox="0 0 24 24">
+        <polygon points="3,4 13,12 3,20" fill="url(#giDark)" />
+        <polygon points="11,4 22,12 11,20 14,12" fill="url(#giFlame)" />
+      </symbol>
+
+      <symbol id="icon-trophy" viewBox="0 0 24 24">
+        <path d="M7 4h10v6a5 5 0 0 1-10 0V4z" fill="url(#giGold)" stroke="#fef08a" stroke-width="1" />
+        <path d="M7 5H4v3a3 3 0 0 0 3 3M17 5h3v3a3 3 0 0 1-3 3" fill="none" stroke="url(#giGold)" stroke-width="2" stroke-linecap="round" />
+        <rect x="10.5" y="14.5" width="3" height="3.5" fill="url(#giGold)" />
+        <rect x="7" y="18" width="10" height="3" rx="1" fill="url(#giGold)" />
+        <polygon points="12,6 13,8.4 15.5,8.6 13.6,10.2 14.2,12.6 12,11.3 9.8,12.6 10.4,10.2 8.5,8.6 11,8.4" fill="#fffbeb" />
+      </symbol>
+
+      <symbol id="icon-gear" viewBox="0 0 24 24">
+        <path d="M10.4 2h3.2l.7 2.4a7.6 7.6 0 0 1 2 .8l2.1-1.3 2.3 2.3-1.3 2.1c.3.6.6 1.3.8 2L22 11v3l-2.4.7a7.6 7.6 0 0 1-.8 2l1.3 2.1-2.3 2.3-2.1-1.3c-.6.3-1.3.6-2 .8L13.6 22h-3.2l-.7-2.4a7.6 7.6 0 0 1-2-.8l-2.1 1.3-2.3-2.3 1.3-2.1a7.6 7.6 0 0 1-.8-2L2 14v-3l2.4-.7c.2-.7.5-1.4.8-2L3.9 6.2l2.3-2.3 2.1 1.3c.6-.3 1.3-.6 2-.8L10.4 2z" fill="url(#giSteel)" />
+        <circle cx="12" cy="12" r="4" fill="#090d16" stroke="url(#giCyan)" stroke-width="1.8" />
+        <circle cx="12" cy="12" r="1.5" fill="url(#giCyan)" />
+      </symbol>
+
+      <symbol id="icon-info" viewBox="0 0 24 24">
+        <path d="M12 2L21 6.5V12c0 5.4-3.8 9.2-9 10.6C6.8 21.2 3 17.4 3 12V6.5L12 2z" fill="url(#giDark)" stroke="url(#giCyan)" stroke-width="1.8" />
+        <polygon points="11,6.2 13.6,6.2 13.1,8.6 10.5,8.6" fill="url(#giGold)" />
+        <polygon points="10.2,10.2 13.4,10.2 12.2,18 9,18" fill="url(#giCyan)" />
+      </symbol>
+
+      <symbol id="icon-rider" viewBox="0 0 24 24">
+        <path d="M4 13a8 8 0 0 1 16 0v3.5a2.5 2.5 0 0 1-2.5 2.5H13l-2-2.5H6.5A2.5 2.5 0 0 1 4 14V13z" fill="url(#giSteel)" />
+        <path d="M11 9.5h8.2c.6 1.2.8 2.4.7 3.5H12.5L11 9.5z" fill="url(#giGold)" />
+        <rect x="7" y="13.5" width="4" height="1.8" rx="0.9" fill="#020617" />
+      </symbol>
+
+      <symbol id="icon-pin" viewBox="0 0 24 24">
+        <path d="M12 2a7 7 0 0 1 7 7c0 5-7 13-7 13S5 14 5 9a7 7 0 0 1 7-7z" fill="url(#giFlame)" />
+        <circle cx="12" cy="9" r="2.7" fill="#fffbeb" />
+      </symbol>
+
+      <symbol id="icon-pause" viewBox="0 0 24 24">
+        <polygon points="6,4 10.5,4 9.5,20 5,20" fill="url(#giGold)" />
+        <polygon points="14.5,4 19,4 18,20 13.5,20" fill="url(#giCyan)" />
+      </symbol>
+
+      <symbol id="icon-sound-on" viewBox="0 0 24 24">
+        <polygon points="3,9 7.5,9 13,4 13,20 7.5,15 3,15" fill="url(#giSteel)" />
+        <path d="M16 8.5a5 5 0 0 1 0 7M18.8 6a8.5 8.5 0 0 1 0 12" fill="none" stroke="url(#giCyan)" stroke-width="2" stroke-linecap="round" />
+      </symbol>
+
+      <symbol id="icon-sound-off" viewBox="0 0 24 24">
+        <polygon points="3,9 7.5,9 13,4 13,20 7.5,15 3,15" fill="#64748b" />
+        <line x1="16" y1="8" x2="21.5" y2="16" stroke="#ef4444" stroke-width="2.2" stroke-linecap="round" />
+        <line x1="21.5" y1="8" x2="16" y2="16" stroke="#ef4444" stroke-width="2.2" stroke-linecap="round" />
+      </symbol>
+
+      <symbol id="icon-tilt" viewBox="0 0 24 24">
+        <g transform="rotate(-14 12 12)">
+          <rect x="7.5" y="3.5" width="9" height="17" rx="2" fill="url(#giDark)" stroke="url(#giCyan)" stroke-width="1.8" />
+          <circle cx="12" cy="17.8" r="1" fill="url(#giGold)" />
+        </g>
+        <path d="M3 10l-1.5 2L3 14M21 10l1.5 2L21 14" fill="none" stroke="url(#giGold)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" />
+      </symbol>
+
+      <symbol id="icon-restart" viewBox="0 0 24 24">
+        <path d="M20 12a8 8 0 1 1-2.6-5.9L20 4v6h-6l2.4-2.1" fill="none" stroke="url(#giDark)" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" />
+      </symbol>
+
+      <symbol id="icon-home" viewBox="0 0 24 24">
+        <polygon points="12,3 22,11 19.5,11 19.5,20 14,20 14,14 10,14 10,20 4.5,20 4.5,11 2,11" fill="url(#giCyan)" />
+      </symbol>
+
+      <symbol id="icon-share" viewBox="0 0 24 24">
+        <polygon points="13,2 4,14 11,14 10,22 20,10 13,10" fill="url(#giGold)" stroke="#ffffff" stroke-width="0.8" />
+      </symbol>
+
+      <symbol id="icon-copy" viewBox="0 0 24 24">
+        <rect x="8" y="8" width="12" height="13" rx="2" fill="url(#giDark)" stroke="url(#giCyan)" stroke-width="1.8" />
+        <path d="M5 16H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v1" fill="none" stroke="url(#giGold)" stroke-width="1.8" stroke-linecap="round" />
+      </symbol>
+
+      <symbol id="icon-revive" viewBox="0 0 24 24">
+        <path d="M12 2L21 7v5.5c0 5-3.6 8.5-9 9.8C6.6 21 3 17.5 3 12.5V7l9-5z" fill="url(#giFlame)" />
+        <polygon points="12.5,6.5 8.5,13 12,13 11.2,17.5 16,11 12.5,11" fill="#fffbeb" />
+      </symbol>
+
+      <symbol id="icon-flame" viewBox="0 0 24 24">
+        <path d="M13 2c1 4-2 5.5-2 8.5 0 1.4.8 2.3 2 2.5 1.8-.3 2.8-2 2.4-4 2.4 1.6 3.6 4.2 3.6 6.8A7 7 0 0 1 5 15.8c0-4.4 3.5-8.4 8-13.8z" fill="url(#giFlame)" />
+        <path d="M12 12.5c1.5 1.2 2.4 2.6 2.4 4.1a2.4 2.4 0 1 1-4.8 0c0-1.6.9-2.8 2.4-4.1z" fill="#fef08a" />
+      </symbol>
+
+      <symbol id="icon-check" viewBox="0 0 24 24">
+        <circle cx="12" cy="12" r="9.5" fill="url(#giGreen)" />
+        <polyline points="7.5,12.5 10.6,15.6 16.8,9" fill="none" stroke="#052e16" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" />
+      </symbol>
+
+      <symbol id="icon-close" viewBox="0 0 24 24">
+        <line x1="6" y1="6" x2="18" y2="18" stroke="url(#giSteel)" stroke-width="2.8" stroke-linecap="round" />
+        <line x1="18" y1="6" x2="6" y2="18" stroke="url(#giSteel)" stroke-width="2.8" stroke-linecap="round" />
+      </symbol>
+    </defs>
+  </svg>
+
+  <main id="app-container" aria-label="Bendskin Rush Game Viewport">
+    <!-- Layer 0: Crisp Full-Screen HTML5 Game Canvas -->
+    <canvas id="game-canvas"></canvas>
+
+    <!-- Layer 1: Minimalist HTML/CSS UI Overlay Screens -->
+    <div id="ui-layer">
+
+      <!-- 1. Live HUD (Active during race) -->
+      <section id="hud-screen" class="ui-screen hidden" aria-label="In-game HUD">
+        <header class="hud-top">
+          <div class="hud-top-row">
+            <div class="hud-metrics">
+              <div class="hud-pill hud-score-pill">
+                <span class="hud-label">DISTANCE</span>
+                <span id="hud-score" class="hud-value">0 m</span>
+              </div>
+              <div class="hud-pill">
+                <span class="hud-label">BEST</span>
+                <span id="hud-best" class="hud-value">0 m</span>
+              </div>
+              <div class="hud-pill hud-bonus-pill">
+                <span class="hud-label">LOOT</span>
+                <span id="hud-bonus" class="hud-value">+0</span>
+              </div>
+            </div>
+
+            <div class="hud-actions">
+              <button id="btn-pause" class="btn-sound-toggle" type="button" aria-label="Pause game" title="Pause Game (Space / P)">
+                <svg class="game-svg-icon"><use href="#icon-pause"></use></svg>
+              </button>
+              <button id="btn-hud-settings" class="btn-sound-toggle" type="button" aria-label="Open settings" title="Settings">
+                <svg class="game-svg-icon"><use href="#icon-gear"></use></svg>
+              </button>
+              <button id="btn-sound" class="btn-sound-toggle" type="button" aria-label="Toggle sound" title="Toggle Web Audio">
+                <svg class="game-svg-icon"><use href="#icon-sound-on"></use></svg>
+              </button>
+            </div>
+          </div>
+
+          <div class="hud-telemetry-row">
+            <div class="hud-badges">
+              <span id="hud-speed" class="hud-mini-badge speed-badge">60 km/h</span>
+              <span id="hud-gear-badge" class="hud-mini-badge gear-badge">G1</span>
+              <span id="hud-quality-badge" class="hud-mini-badge quality-badge">ULTRA HD+</span>
+              <span id="hud-fps" class="hud-mini-badge fps-badge">60 FPS</span>
+              <button id="btn-hud-tilt" class="hud-mini-badge tilt-badge" type="button" title="Toggle or Recenter Phone Tilt Steering">
+                <svg class="game-svg-icon icon-sm"><use href="#icon-tilt"></use></svg>
+                <span class="btn-arcade-label">TILT: ON</span>
+              </button>
+            </div>
+            <button id="btn-test-gameover" class="btn-test-crash" type="button" title="Preview Game Over screen">
+              Test Crash
+            </button>
+          </div>
+        </header>
+
+        <div id="hud-rival-pill" class="hud-rival-pill hidden">RIVAL: 0m</div>
+
+        <footer class="hud-bottom">
+          <div id="hud-combo-badge" class="hud-combo-badge hidden">
+            <span id="hud-combo-text">CLOSE CALL! x2</span>
+            <div class="combo-bar-track">
+              <div id="hud-combo-fill" class="combo-bar-fill"></div>
+            </div>
+          </div>
+          <div id="hud-hint-pill" class="hud-hint-pill">&lt;/&gt; Arrows or Swipe to Steer • H / Horn • Space / Pause</div>
+        </footer>
+
+        <div id="hud-pedals" class="hud-pedals" aria-label="Steering and speed controls">
+          <div id="hud-steer-cluster" class="hud-steer-cluster" role="group" aria-label="Steer Left or Right">
+            <button id="btn-steer-left" class="thumb-pedal steer-arrow-btn" type="button" aria-label="Steer Left">
+              <span class="steer-arrow-icon">&lt;</span>
+              <span class="pedal-sub">LEFT</span>
+            </button>
+            <button id="btn-steer-right" class="thumb-pedal steer-arrow-btn" type="button" aria-label="Steer Right">
+              <span class="steer-arrow-icon">&gt;</span>
+              <span class="pedal-sub">RIGHT</span>
+            </button>
+          </div>
+          <div class="hud-speed-cluster" role="group" aria-label="Horn, Gas and Brake Pedals">
+            <button id="btn-horn" class="thumb-pedal pedal-horn" type="button" aria-label="Honk horn" title="Honk Horn (H)">
+              <span class="pedal-title">HORN</span>
+              <span class="pedal-sub">BEEP</span>
+            </button>
+            <button id="pedal-brake" class="thumb-pedal pedal-brake" type="button" aria-label="Brake pedal">
+              <span class="pedal-title">BRAKE</span>
+              <span class="pedal-sub">HOLD</span>
+            </button>
+            <button id="pedal-gas" class="thumb-pedal pedal-gas hidden" type="button" aria-label="Gas pedal">
+              <span class="pedal-title">GAS</span>
+              <span class="pedal-sub">DRIVE</span>
+            </button>
+          </div>
+        </div>
+      </section>
+
+      <!-- 2. Start Screen -->
+      <section id="start-screen" class="ui-screen" aria-label="Start Screen">
+        <div class="screen-top">
+          <div id="rival-start-banner" class="rival-start-banner hidden" role="status"></div>
+        </div>
+
+        <div class="hero-card">
+          <div class="hero-logo-crest">
+            <img src="/assets/logo.svg" alt="Bendskin Rush First-Person Motorcycle Crest" class="hero-emblem-img">
+          </div>
+
+          <h1 class="gaming-title-heading" aria-label="BENDSKIN RUSH">
+            <svg id="gaming-logo-wordmark" class="gaming-logo-wordmark animate-bonk" viewBox="0 0 640 160" role="img" aria-label="BENDSKIN RUSH Gaming Wordmark">
+              <defs>
+                <linearGradient id="wordGoldGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+                  <stop offset="0%" stop-color="#fffbeb" />
+                  <stop offset="30%" stop-color="#fde047" />
+                  <stop offset="72%" stop-color="#f59e0b" />
+                  <stop offset="100%" stop-color="#d97706" />
+                </linearGradient>
+                <linearGradient id="rushFlameGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+                  <stop offset="0%" stop-color="#fef08a" />
+                  <stop offset="48%" stop-color="#fb923c" />
+                  <stop offset="100%" stop-color="#ef4444" />
+                </linearGradient>
+              </defs>
+
+              <!-- Split Collision Halves (No shadow underneath): BEND + SKIN -->
+              <g class="word-piece piece-bend">
+                <text x="322" y="74" text-anchor="end" font-family="'Arial Black', Impact, 'Segoe UI Black', sans-serif" font-size="76" font-weight="900" font-style="italic" letter-spacing="2" fill="url(#wordGoldGrad)" stroke="#0f172a" stroke-width="3" paint-order="stroke">BEND</text>
+              </g>
+              <g class="word-piece piece-skin">
+                <text x="320" y="74" text-anchor="start" font-family="'Arial Black', Impact, 'Segoe UI Black', sans-serif" font-size="76" font-weight="900" font-style="italic" letter-spacing="2" fill="url(#wordGoldGrad)" stroke="#0f172a" stroke-width="3" paint-order="stroke">SKIN</text>
+              </g>
+
+              <!-- Split Collision Halves (No shadow underneath): RU + SH -->
+              <g class="word-piece piece-ru">
+                <text x="320" y="138" text-anchor="end" font-family="'Arial Black', Impact, 'Segoe UI Black', sans-serif" font-size="64" font-weight="900" font-style="italic" letter-spacing="4" fill="url(#rushFlameGrad)" stroke="#0f172a" stroke-width="2.5" paint-order="stroke">RU</text>
+              </g>
+              <g class="word-piece piece-sh">
+                <text x="322" y="138" text-anchor="start" font-family="'Arial Black', Impact, 'Segoe UI Black', sans-serif" font-size="64" font-weight="900" font-style="italic" letter-spacing="4" fill="url(#rushFlameGrad)" stroke="#0f172a" stroke-width="2.5" paint-order="stroke">SH</text>
+              </g>
+            </svg>
+          </h1>
+        </div>
+
+        <div class="home-bottom-stack">
+          <div id="home-account-bar" class="home-account-bar">
+            <div class="home-account-info">
+              <span id="home-account-badge" class="account-mode-badge guest">GUEST</span>
+              <span id="home-account-name" class="home-account-name">Guest Rider</span>
+              <span class="account-sep">•</span>
+              <svg class="game-svg-icon icon-xs" aria-hidden="true"><use href="#icon-pin"></use></svg>
+              <span id="home-account-location" class="home-account-location">Choose Location</span>
+            </div>
+            <button id="btn-open-account" class="btn-account-pill" type="button">
+              <svg class="game-svg-icon icon-sm"><use href="#icon-rider"></use></svg>
+              <span class="btn-arcade-label">Account / Location</span>
+            </button>
+          </div>
+
+          <div class="action-stack home-menu-grid">
+            <button id="btn-start" class="btn-primary home-play-btn" type="button">
+              <svg class="game-svg-icon"><use href="#icon-play"></use></svg>
+              <span class="btn-arcade-label">PLAY</span>
+            </button>
+            <button id="btn-open-leaderboard" class="btn-secondary" type="button">
+              <svg class="game-svg-icon"><use href="#icon-trophy"></use></svg>
+              <span class="btn-arcade-label">LEADERBOARD</span>
+            </button>
+            <button id="btn-open-settings" class="btn-secondary" type="button">
+              <svg class="game-svg-icon"><use href="#icon-gear"></use></svg>
+              <span class="btn-arcade-label">SETTINGS</span>
+            </button>
+            <button id="btn-open-about" class="btn-secondary" type="button">
+              <svg class="game-svg-icon"><use href="#icon-info"></use></svg>
+              <span class="btn-arcade-label">ABOUT US</span>
+            </button>
+          </div>
+
+          <nav class="policy-footer-links" aria-label="Game information and legal policies">
+            <button class="policy-link" type="button" data-about-tab="about">About</button>
+            <span aria-hidden="true">•</span>
+            <button class="policy-link" type="button" data-about-tab="privacy">Privacy Policy</button>
+            <span aria-hidden="true">•</span>
+            <button class="policy-link" type="button" data-about-tab="terms">Terms of Use</button>
+            <span aria-hidden="true">•</span>
+            <button class="policy-link" type="button" data-about-tab="contact">Contact</button>
+          </nav>
+
+          <aside id="ad-slot-home" class="ad-banner-slot" aria-label="Advertisement banner">
+            <span class="ad-slot-badge">AD</span>
+            <span class="ad-slot-text">SPONSORED • AD PLACEMENT (320×50)</span>
+          </aside>
+        </div>
+      </section>
+
+      <!-- 3. Game Over Screen -->
+      <section id="gameover-screen" class="ui-screen hidden" aria-label="Game Over Screen">
+        <div class="screen-top">
+          <div class="gameover-badge">RUN COMPLETE</div>
+        </div>
+
+        <div class="gameover-card">
+          <h2 class="gameover-title">RUN FINISHED</h2>
+
+          <div class="score-grid">
+            <div class="score-box primary-box">
+              <span class="score-label">FINAL DISTANCE</span>
+              <span id="final-score" class="score-number">0 m</span>
+            </div>
+            <div class="score-box">
+              <span class="score-label">YOUR BEST</span>
+              <span id="final-best" class="score-number">0 m</span>
+            </div>
+          </div>
+
+          <div id="city-rank" class="city-rank-banner">Rank #1 on Live Board</div>
+
+          <!-- Rival Challenge Outcome Banner -->
+          <div id="rival-gameover-banner" class="rival-gameover-banner hidden" role="status"></div>
+
+          <!-- Play First, Name Later Onboarding Card -->
+          <div id="onboarding-card" class="onboarding-card hidden">
+            <p id="onboarding-rank-title" class="onboarding-prompt">
+              Enter your Rider Name &amp; Location to save your real score on the live board:
+            </p>
+            <div class="onboarding-fields">
+              <input id="input-nickname" class="onboarding-input" type="text" maxlength="15" autocomplete="off" placeholder="Rider Name (2-15 chars)" aria-label="Rider Nickname">
+              <select id="select-city" class="onboarding-select" aria-label="Select Your Location">
+                <optgroup label="Cameroon Cities">
+                  <option value="Douala">Douala</option>
+                  <option value="Yaoundé">Yaoundé</option>
+                  <option value="Bamenda">Bamenda</option>
+                  <option value="Buea">Buea</option>
+                  <option value="Bafoussam">Bafoussam</option>
+                  <option value="Limbe">Limbe</option>
+                  <option value="Kribi">Kribi</option>
+                  <option value="Kumba">Kumba</option>
+                  <option value="Garoua">Garoua</option>
+                  <option value="Maroua">Maroua</option>
+                  <option value="Ngaoundéré">Ngaoundéré</option>
+                  <option value="Bertoua">Bertoua</option>
+                  <option value="Ebolowa">Ebolowa</option>
+                </optgroup>
+                <optgroup label="International / Diaspora">
+                  <option value="Nigeria">Nigeria</option>
+                  <option value="Ghana">Ghana</option>
+                  <option value="Ivory Coast">Ivory Coast</option>
+                  <option value="Senegal">Senegal</option>
+                  <option value="France">France</option>
+                  <option value="UK">UK</option>
+                  <option value="Germany">Germany</option>
+                  <option value="USA">USA</option>
+                  <option value="Canada">Canada</option>
+                  <option value="Custom / Other">Custom / Other</option>
+                </optgroup>
+              </select>
+            </div>
+            <input id="onboarding-custom-city" class="onboarding-input hidden" type="text" maxlength="20" autocomplete="off" placeholder="Enter your city or country" aria-label="Custom Location">
+            <button id="btn-save-profile" class="btn-save-board" type="button">
+              <svg class="game-svg-icon"><use href="#icon-trophy"></use></svg>
+              <span class="btn-arcade-label">SAVE TO BOARD</span>
+            </button>
+            <div id="onboarding-feedback" class="onboarding-feedback hidden" role="status"></div>
+          </div>
+
+          <!-- Saved Rider Identity Strip -->
+          <div id="player-tag-bar" class="player-tag-bar hidden">
+            <span id="player-tag-label" class="player-tag-label">Rider • Douala</span>
+            <div class="player-tag-actions">
+              <span id="cloud-sync-status" class="cloud-sync-status">Synced</span>
+              <button id="btn-edit-profile" class="btn-edit-profile" type="button">Edit</button>
+              <button id="btn-gameover-account" class="btn-edit-profile" type="button">Account</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="action-stack">
+          <button id="btn-revive-ad" class="btn-revive" type="button">
+            <svg class="game-svg-icon"><use href="#icon-revive"></use></svg>
+            <span class="btn-arcade-label">WATCH AD TO REVIVE (+CONTINUE)</span>
+          </button>
+          <button id="btn-restart" class="btn-primary" type="button">
+            <svg class="game-svg-icon"><use href="#icon-restart"></use></svg>
+            <span class="btn-arcade-label">RIDE AGAIN</span>
+          </button>
+          <div class="viral-share-group">
+            <button id="btn-whatsapp" class="btn-whatsapp" type="button">
+              <svg class="game-svg-icon"><use href="#icon-share"></use></svg>
+              <span class="btn-arcade-label">CHALLENGE A FRIEND ON WHATSAPP</span>
+            </button>
+            <button id="btn-copy-link" class="btn-copy-link" type="button">
+              <svg class="game-svg-icon"><use href="#icon-copy"></use></svg>
+              <span class="btn-arcade-label">COPY CHALLENGE LINK</span>
+            </button>
+            <div id="copy-toast" class="copy-toast hidden" role="status">
+              Copied! Paste in TikTok bio or group chat
+            </div>
+          </div>
+          <div class="gameover-nav-row">
+            <button id="btn-gameover-home" class="btn-secondary" type="button">
+              <svg class="game-svg-icon"><use href="#icon-home"></use></svg>
+              <span class="btn-arcade-label">HOME SCREEN</span>
+            </button>
+            <button id="btn-gameover-settings" class="btn-secondary" type="button">
+              <svg class="game-svg-icon"><use href="#icon-gear"></use></svg>
+              <span class="btn-arcade-label">SETTINGS</span>
+            </button>
+          </div>
+          <button id="btn-gameover-leaderboard" class="btn-secondary" type="button">
+            <svg class="game-svg-icon"><use href="#icon-trophy"></use></svg>
+            <span class="btn-arcade-label">VIEW LEADERBOARD</span>
+          </button>
+          <aside id="ad-slot-gameover" class="ad-banner-slot" aria-label="Advertisement banner">
+            <span class="ad-slot-badge">AD</span>
+            <span class="ad-slot-text">SPONSORED • AD PLACEMENT (320×50)</span>
+          </aside>
+        </div>
+      </section>
+
+      <!-- 4. City Leaderboard Modal -->
+      <section id="leaderboard-modal" class="ui-modal hidden" role="dialog" aria-modal="true" aria-labelledby="leaderboard-heading">
+        <div class="modal-card">
+          <div class="modal-header">
+            <div>
+              <span class="modal-kicker">LIVE STANDINGS PREVIEW</span>
+              <h2 id="leaderboard-heading" class="modal-title">
+                <svg class="game-svg-icon"><use href="#icon-trophy"></use></svg>
+                <span>LEADERBOARD</span>
+              </h2>
+            </div>
+            <button id="btn-close-leaderboard" class="btn-close-modal" type="button" aria-label="Close leaderboard">
+              <svg class="game-svg-icon"><use href="#icon-close"></use></svg>
+            </button>
+          </div>
+
+          <div class="lb-mode-tabs" role="tablist" aria-label="Leaderboard view">
+            <button id="tab-top-riders" class="lb-mode-tab active" type="button" role="tab" aria-selected="true">
+              <svg class="game-svg-icon icon-sm"><use href="#icon-rider"></use></svg>
+              <span>Top 50 Riders</span>
+            </button>
+            <button id="tab-city-war" class="lb-mode-tab" type="button" role="tab" aria-selected="false">
+              <svg class="game-svg-icon icon-sm"><use href="#icon-flame"></use></svg>
+              <span>City War</span>
+            </button>
+          </div>
+
+          <div id="city-filter-row" class="city-filter-row" role="tablist" aria-label="Filter by location">
+            <button class="city-chip active" type="button" data-city="All">All Locations</button>
+          </div>
+
+          <ul id="leaderboard-list" class="leaderboard-list">
+            <!-- Populated dynamically in game.js -->
+          </ul>
+
+          <p id="modal-footnote" class="modal-footnote">100% Real Riders • Anti-cheat verified • Live Cloud Sync</p>
+        </div>
+      </section>
+
+      <!-- 4B. Rider Account, Guest & Location Modal -->
+      <section id="account-modal" class="ui-modal hidden" role="dialog" aria-modal="true" aria-labelledby="account-heading">
+        <div class="modal-card account-modal-card">
+          <div class="modal-header">
+            <div>
+              <span class="modal-kicker">RIDER IDENTITY &amp; LOCATION</span>
+              <h2 id="account-heading" class="modal-title">
+                <svg class="game-svg-icon"><use href="#icon-rider"></use></svg>
+                <span>RIDER ACCOUNT</span>
+              </h2>
+            </div>
+            <button id="btn-close-account" class="btn-close-modal" type="button" aria-label="Close Account Modal">
+              <svg class="game-svg-icon"><use href="#icon-close"></use></svg>
+            </button>
+          </div>
+
+          <div class="auth-tabs" role="tablist" aria-label="Account Mode">
+            <button id="tab-auth-signup" class="auth-tab active" type="button" role="tab" aria-selected="true">
+              Sign Up
+            </button>
+            <button id="tab-auth-login" class="auth-tab" type="button" role="tab" aria-selected="false">
+              Log In
+            </button>
+            <button id="tab-auth-guest" class="auth-tab" type="button" role="tab" aria-selected="false">
+              Play as Guest
+            </button>
+          </div>
+
+          <p id="account-mode-subtitle" class="account-mode-subtitle">
+            Create your rider profile to save your username, location &amp; high scores across devices.
+          </p>
+
+          <div class="auth-form-body">
+            <div id="account-username-group" class="auth-field-group">
+              <label for="account-username" class="auth-field-label">Username / Rider Handle</label>
+              <input id="account-username" class="onboarding-input" type="text" maxlength="15" autocomplete="username" placeholder="e.g. MotoKing237 (2-15 chars)">
+            </div>
+
+            <div id="account-password-group" class="auth-field-group">
+              <label for="account-password" class="auth-field-label">PIN / Password (4+ chars)</label>
+              <input id="account-password" class="onboarding-input" type="password" maxlength="24" autocomplete="current-password" placeholder="Enter PIN or password">
+            </div>
+
+            <div id="account-location-group" class="auth-field-group">
+              <label for="account-location" class="auth-field-label">Where are you riding from? (City / Country)</label>
+              <select id="account-location" class="onboarding-select">
+                <optgroup label="Cameroon Cities">
+                  <option value="Douala">Douala (Cameroon)</option>
+                  <option value="Yaoundé">Yaoundé (Cameroon)</option>
+                  <option value="Bamenda">Bamenda (Cameroon)</option>
+                  <option value="Buea">Buea (Cameroon)</option>
+                  <option value="Bafoussam">Bafoussam (Cameroon)</option>
+                  <option value="Limbe">Limbe (Cameroon)</option>
+                  <option value="Kribi">Kribi (Cameroon)</option>
+                  <option value="Kumba">Kumba (Cameroon)</option>
+                  <option value="Garoua">Garoua (Cameroon)</option>
+                  <option value="Maroua">Maroua (Cameroon)</option>
+                  <option value="Ngaoundéré">Ngaoundéré (Cameroon)</option>
+                  <option value="Bertoua">Bertoua (Cameroon)</option>
+                  <option value="Ebolowa">Ebolowa (Cameroon)</option>
+                </optgroup>
+                <optgroup label="International / Diaspora">
+                  <option value="Nigeria">Nigeria</option>
+                  <option value="Ghana">Ghana</option>
+                  <option value="Ivory Coast">Ivory Coast</option>
+                  <option value="Senegal">Senegal</option>
+                  <option value="France">France</option>
+                  <option value="UK">UK</option>
+                  <option value="Germany">Germany</option>
+                  <option value="USA">USA</option>
+                  <option value="Canada">Canada</option>
+                  <option value="Custom / Other">Custom / Other Location...</option>
+                </optgroup>
+              </select>
+            </div>
+
+            <div id="account-custom-location-group" class="auth-field-group hidden">
+              <label for="account-custom-location" class="auth-field-label">Custom City or Country</label>
+              <input id="account-custom-location" class="onboarding-input" type="text" maxlength="20" autocomplete="off" placeholder="Enter your city or country">
+            </div>
+
+            <p id="account-status-msg" class="onboarding-feedback hidden" role="status"></p>
+          </div>
+
+          <div class="action-stack">
+            <button id="btn-account-submit" class="btn-primary" type="button">
+              <svg class="game-svg-icon"><use href="#icon-check"></use></svg>
+              <span class="btn-arcade-label">CREATE ACCOUNT &amp; RIDE</span>
+            </button>
+            <button id="btn-account-quick-guest" class="btn-secondary" type="button">
+              <svg class="game-svg-icon"><use href="#icon-rider"></use></svg>
+              <span class="btn-arcade-label">PLAY AS GUEST</span>
+            </button>
+          </div>
+        </div>
+      </section>
+
+      <!-- 5. Pause Modal -->
+      <section id="pause-modal" class="ui-modal hidden" role="dialog" aria-modal="true" aria-labelledby="pause-heading">
+        <div class="modal-card pause-modal-card">
+          <div class="modal-header">
+            <div>
+              <span class="modal-kicker">RACE SUSPENDED</span>
+              <h2 id="pause-heading" class="modal-title">
+                <svg class="game-svg-icon"><use href="#icon-pause"></use></svg>
+                <span>PAUSED</span>
+              </h2>
+            </div>
+            <button id="btn-close-pause" class="btn-close-modal" type="button" aria-label="Resume race">
+              <svg class="game-svg-icon"><use href="#icon-close"></use></svg>
+            </button>
+          </div>
+
+          <div class="pause-stats-grid">
+            <div class="score-box primary-box">
+              <span class="score-label">DISTANCE</span>
+              <span id="pause-distance" class="score-number">0 m</span>
+            </div>
+            <div class="score-box">
+              <span class="score-label">BEST</span>
+              <span id="pause-best" class="score-number">0 m</span>
+            </div>
+            <div class="score-box">
+              <span class="score-label">COMBO</span>
+              <span id="pause-combo" class="score-number">x1</span>
+            </div>
+          </div>
+
+          <div class="action-stack pause-action-stack">
+            <button id="btn-resume" class="btn-primary" type="button">
+              <svg class="game-svg-icon"><use href="#icon-play"></use></svg>
+              <span class="btn-arcade-label">RESUME RACE</span>
+            </button>
+            <button id="btn-pause-settings" class="btn-secondary" type="button">
+              <svg class="game-svg-icon"><use href="#icon-gear"></use></svg>
+              <span class="btn-arcade-label">SETTINGS (QUALITY &amp; CONTROLS)</span>
+            </button>
+            <button id="btn-pause-restart" class="btn-secondary" type="button">
+              <svg class="game-svg-icon"><use href="#icon-restart"></use></svg>
+              <span class="btn-arcade-label">RESTART RUN</span>
+            </button>
+            <button id="btn-pause-home" class="btn-secondary" type="button">
+              <svg class="game-svg-icon"><use href="#icon-home"></use></svg>
+              <span class="btn-arcade-label">HOME SCREEN</span>
+            </button>
+          </div>
+        </div>
+      </section>
+
+      <!-- 6. Settings Modal -->
+      <section id="settings-modal" class="ui-modal hidden" role="dialog" aria-modal="true" aria-labelledby="settings-heading">
+        <div class="modal-card settings-modal-card">
+          <div class="modal-header">
+            <div>
+              <span class="modal-kicker">GRAPHICS, CONTROLS &amp; AUDIO</span>
+              <h2 id="settings-heading" class="modal-title">
+                <svg class="game-svg-icon"><use href="#icon-gear"></use></svg>
+                <span>SETTINGS</span>
+              </h2>
+            </div>
+            <button id="btn-close-settings" class="btn-close-modal" type="button" aria-label="Close settings">
+              <svg class="game-svg-icon"><use href="#icon-close"></use></svg>
+            </button>
+          </div>
+
+          <div class="settings-body">
+            <div class="settings-group">
+              <div class="settings-label-row">
+                <span class="settings-label">Graphics Quality</span>
+                <span class="settings-badge">3D Engine</span>
+              </div>
+              <div class="quality-grid" role="group" aria-label="Graphics Quality">
+                <button id="btn-quality-low" class="seg-btn" type="button" data-quality="low">
+                  Low 2D
+                </button>
+                <button id="btn-quality-normal" class="seg-btn" type="button" data-quality="normal">
+                  Normal
+                </button>
+                <button id="btn-quality-high" class="seg-btn" type="button" data-quality="high">
+                  High 3D
+                </button>
+                <button id="btn-quality-ultra" class="seg-btn active" type="button" data-quality="ultra">
+                  Ultra HD+
+                </button>
+              </div>
+              <p id="graphics-quality-desc" class="settings-hint">
+                Ultra HD+ active: 3D multi-story city buildings, billboards, truck cabs, dynamic headlights, mirror reflections &amp; 3x crispness.
+              </p>
+            </div>
+
+            <div class="settings-group">
+              <div class="settings-label-row">
+                <span class="settings-label">Drive Mode</span>
+                <span class="settings-badge">Saved Locally</span>
+              </div>
+              <div class="segmented-control" role="group" aria-label="Drive Mode">
+                <button id="btn-mode-auto" class="seg-btn active" type="button">
+                  Auto-Drive (Default)
+                </button>
+                <button id="btn-mode-manual" class="seg-btn" type="button">
+                  Manual Gas &amp; Brake
+                </button>
+              </div>
+              <p id="drive-mode-desc" class="settings-hint">
+                Bike accelerates automatically; tap or hold Brake on the bottom-right to slow before tight traffic.
+              </p>
+            </div>
+
+            <div class="settings-group">
+              <div class="settings-label-row">
+                <span class="settings-label">Phone Tilt / Gyroscope Steering</span>
+                <span id="tilt-status-badge" class="settings-badge">Active</span>
+              </div>
+              <div class="segmented-control" role="group" aria-label="Phone Tilt Steering">
+                <button id="btn-tilt-toggle" class="btn-secondary" type="button">
+                  <svg class="game-svg-icon icon-sm"><use href="#icon-tilt"></use></svg>
+                  <span class="btn-arcade-label">Tilt Steer: ON</span>
+                </button>
+                <button id="btn-tilt-calibrate" class="btn-secondary" type="button">
+                  <svg class="game-svg-icon icon-sm"><use href="#icon-pin"></use></svg>
+                  <span class="btn-arcade-label">Re-Center Angle</span>
+                </button>
+              </div>
+              <p id="tilt-desc" class="settings-hint">
+                Lean your phone left or right to steer automatically while holding GAS/BRAKE or using &lt;/&gt; arrows.
+              </p>
+            </div>
+
+            <div class="settings-group">
+              <div class="settings-label-row">
+                <label class="settings-label" for="slider-sensitivity">Steering Sensitivity</label>
+                <span id="sensitivity-value" class="sensitivity-pill">1.0x</span>
+              </div>
+              <input id="slider-sensitivity" class="settings-slider" type="range" min="0.5" max="2.0" step="0.1" value="1.0">
+              <div class="slider-marks">
+                <span>0.5x Steady</span>
+                <span>1.0x Normal</span>
+                <span>2.0x Pro</span>
+              </div>
+            </div>
+
+            <div class="settings-group">
+              <span class="settings-label">Audio Engine</span>
+              <button id="btn-settings-sound" class="btn-secondary" type="button">
+                <svg class="game-svg-icon icon-sm"><use href="#icon-sound-on"></use></svg>
+                <span class="btn-arcade-label">Sound Effects: ON</span>
+              </button>
+            </div>
+
+            <div class="settings-group">
+              <div class="settings-label-row">
+                <label class="settings-label" for="input-adsense-pub">Google AdSense Publisher ID</label>
+                <span id="adsense-status-badge" class="settings-badge">Not Linked</span>
+              </div>
+              <input id="input-adsense-pub" class="onboarding-input" type="text" maxlength="28" autocomplete="off" placeholder="ca-pub-XXXXXXXXXXXXXXXX" aria-label="Google AdSense Publisher ID">
+              <p class="settings-hint">
+                Optional: paste your approved <code>ca-pub-...</code> ID to activate Google AdSense script tags on live domains (and update <code>ads.txt</code>).
+              </p>
+            </div>
+          </div>
+
+          <button id="btn-save-settings" class="btn-primary settings-done-btn" type="button">
+            DONE
+          </button>
+        </div>
+      </section>
+
+      <!-- 7. About & AdSense Compliance Policy Modal -->
+      <section id="about-modal" class="ui-modal hidden" role="dialog" aria-modal="true" aria-labelledby="about-heading">
+        <div class="modal-card about-modal-card">
+          <div class="modal-header">
+            <div>
+              <span class="modal-kicker">GAME INFO &amp; POLICIES</span>
+              <h2 id="about-heading" class="modal-title">
+                <svg class="game-svg-icon"><use href="#icon-info"></use></svg>
+                <span>ABOUT BENDSKIN RUSH</span>
+              </h2>
+            </div>
+            <button id="btn-close-about" class="btn-close-modal" type="button" aria-label="Close about and policies">
+              <svg class="game-svg-icon"><use href="#icon-close"></use></svg>
+            </button>
+          </div>
+
+          <div class="about-tabs" role="tablist" aria-label="Game info and policy sections">
+            <button id="tab-about-info" class="about-tab active" type="button" data-about-tab="about" role="tab" aria-selected="true">
+              About &amp; Controls
+            </button>
+            <button id="tab-about-privacy" class="about-tab" type="button" data-about-tab="privacy" role="tab" aria-selected="false">
+              Privacy Policy
+            </button>
+            <button id="tab-about-terms" class="about-tab" type="button" data-about-tab="terms" role="tab" aria-selected="false">
+              Terms of Use
+            </button>
+            <button id="tab-about-contact" class="about-tab" type="button" data-about-tab="contact" role="tab" aria-selected="false">
+              Contact
+            </button>
+          </div>
+
+          <div class="about-content">
+            <article id="panel-about" class="about-panel" data-about-panel="about">
+              <h3>Welcome to Bendskin Rush</h3>
+              <p>
+                <strong>Bendskin Rush</strong> is a lightweight, 60 FPS first-person urban motorcycle racing game built for instant play in mobile and desktop browsers. Weave between yellow taxis, commercial vans, timber trucks, potholes, and road barriers while chasing your personal best and city leaderboard rank.
+              </p>
+              <h4>How to Ride &amp; Controls</h4>
+              <ul>
+                <li><strong>Mobile Steering:</strong> Swipe left/right anywhere above the pedals or tap the left/right side of the road to switch lanes. Adjust threshold &amp; turn speed in <em>Settings</em>.</li>
+                <li><strong>Mobile Speed:</strong> In <em>Auto-Drive</em>, hold the bottom-left <strong>BRAKE</strong> pedal to scrub speed before dense traffic. Switch to <em>Manual Gas &amp; Brake</em> in Settings for dedicated <strong>GAS</strong> and <strong>BRAKE</strong> thumb pedals.</li>
+                <li><strong>Desktop Keyboard:</strong> <code>ArrowLeft</code> / <code>A</code> &amp; <code>ArrowRight</code> / <code>D</code> steer; <code>ArrowUp</code> / <code>W</code> accelerate throttle; <code>ArrowDown</code> / <code>S</code> engage front &amp; rear brakes; <code>P</code> or <code>Esc</code> pauses the race.</li>
+                <li><strong>Unlimited Close Calls &amp; Graphics:</strong> Swerve past traffic at the last instant to build unlimited <code>x2</code>, <code>x5</code>, <code>x10+</code> Sharp Dodge multipliers, and choose <em>Low 2D</em>, <em>Normal</em>, <em>High</em>, or <em>Ultra 3D</em> in Settings.</li>
+              </ul>
+            </article>
+
+            <article id="panel-privacy" class="about-panel hidden" data-about-panel="privacy">
+              <h3>Privacy Policy</h3>
+              <p><em>Last Updated: November 14, 2026</em></p>
+              <p>
+                King of Race Interactive respects your privacy. Bendskin Rush operates with minimal data collection designed for fast, anonymous arcade play.
+              </p>
+              <h4>1. Information Stored Locally on Your Device</h4>
+              <p>
+                Your browser's <code>localStorage</code> stores your best distance, optional rider nickname, chosen city tag, generated anonymous player ID, control settings (drive mode, steering sensitivity, audio preference), and cached leaderboard standings. You can clear this data anytime via your browser site settings.
+              </p>
+              <h4>2. Leaderboard &amp; Server Logs</h4>
+              <p>
+                When you choose a rider nickname and city tag, your personal best distance, max combo, and run verification telemetry are stored to maintain the public leaderboard. Do not enter personal real names, phone numbers, or sensitive information as your nickname.
+              </p>
+              <h4>3. Advertising, Cookies &amp; Google AdSense</h4>
+              <p>
+                Non-intrusive banner placements on menu/summary screens and optional rewarded continues may use Google AdSense / Google H5 Games Ads. Third-party vendors, including Google, use cookies to serve ads based on a user's prior visits to this site or other websites.
+              </p>
+              <p>
+                Google's use of advertising cookies enables it and its partners to serve ads to users based on their visit to this game and/or other sites on the Internet. Users may opt out of personalized advertising by visiting <a href="https://adssettings.google.com/" target="_blank" rel="noopener noreferrer">Google Ads Settings</a> or review how Google uses data at <a href="https://policies.google.com/technologies/ads" target="_blank" rel="noopener noreferrer">Google Advertising Policies</a>.
+              </p>
+            </article>
+
+            <article id="panel-terms" class="about-panel hidden" data-about-panel="terms">
+              <h3>Terms of Use</h3>
+              <p>
+                By accessing or playing <strong>Bendskin Rush</strong>, you agree to the following terms:
+              </p>
+              <ul>
+                <li><strong>Fair Play &amp; Anti-Cheat:</strong> Score submissions are validated against run duration and speed physics. Tampering, automated bots, memory editing, or forged telemetry signatures may result in automatic rejection or removal from the leaderboard.</li>
+                <li><strong>Community Conduct:</strong> Choose clean, respectful rider nicknames. Offensive or abusive nicknames are filtered and prohibited.</li>
+                <li><strong>Service Availability:</strong> The game is provided on an "as is" basis for entertainment purposes without warranty of uninterrupted uptime or leaderboard retention.</li>
+                <li><strong>Safe Use:</strong> Do not operate mobile devices while driving a real motorcycle or vehicle.</li>
+              </ul>
+            </article>
+
+            <article id="panel-contact" class="about-panel hidden" data-about-panel="contact">
+              <h3>Contact &amp; Support</h3>
+              <p>
+                <strong>Publisher:</strong> King of Race Interactive
+              </p>
+              <p>
+                Have feedback, spotted a bug, want to report an inappropriate leaderboard name, or have privacy/AdSense inquiries? Reach our team anytime:
+              </p>
+              <ul>
+                <li><strong>Support Email:</strong> <a href="mailto:support@bendskinrush.com">support@bendskinrush.com</a></li>
+                <li><strong>Privacy Inquiries:</strong> <a href="mailto:privacy@bendskinrush.com">privacy@bendskinrush.com</a></li>
+                <li><strong>Response Time:</strong> Typically within 48 business hours.</li>
+              </ul>
+            </article>
+          </div>
+        </div>
+      </section>
+
+    </div>
+  </main>
+</body>
+</html>
