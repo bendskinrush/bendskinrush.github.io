@@ -25,6 +25,8 @@
   <meta name="google-adsense-account" content="ca-pub-4032050439057511">
   <script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-4032050439057511"
        crossorigin="anonymous"></script>
+  <script src="vendor/three.min.js" defer></script>
+  <script src="ultra3d.js" defer></script>
   <script src="game.js" defer></script>
 </head>
 <body>
@@ -156,11 +158,45 @@
         <line x1="6" y1="6" x2="18" y2="18" stroke="url(#giSteel)" stroke-width="2.8" stroke-linecap="round" />
         <line x1="18" y1="6" x2="6" y2="18" stroke="url(#giSteel)" stroke-width="2.8" stroke-linecap="round" />
       </symbol>
+
+      <symbol id="icon-coin" viewBox="0 0 24 24">
+        <circle cx="12" cy="12" r="10" fill="url(#giGold)" stroke="#fef08a" stroke-width="1.6" />
+        <circle cx="12" cy="12" r="6.8" fill="none" stroke="#92400e" stroke-width="1.4" />
+        <polygon points="12,6.5 13.5,10 17.2,10.3 14.3,12.7 15.2,16.4 12,14.4 8.8,16.4 9.7,12.7 6.8,10.3 10.5,10" fill="#78350f" />
+      </symbol>
+
+      <symbol id="icon-fuel" viewBox="0 0 24 24">
+        <path d="M5 7a2 2 0 0 1 2-2h6l4 4v10a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V7z" fill="url(#giFlame)" stroke="#fef08a" stroke-width="1.2" />
+        <path d="M13.5 3.5l3-1.5 2 2-1.8 1.8" fill="none" stroke="url(#giGold)" stroke-width="2" stroke-linecap="round" />
+        <rect x="8.5" y="10.5" width="5" height="6" rx="1" fill="#0f172a" />
+        <polygon points="11.2,11.2 9.4,13.6 11,13.6 10.6,15.8 12.8,13.1 11.2,13.1" fill="#fef08a" />
+      </symbol>
+
+      <symbol id="icon-shield" viewBox="0 0 24 24">
+        <path d="M12 2L20.5 5.8v5.8c0 5.1-3.5 9.1-8.5 10.4C7 20.7 3.5 16.7 3.5 11.6V5.8L12 2z" fill="url(#giCyan)" stroke="#fffbeb" stroke-width="1.4" />
+        <path d="M12 5.2L17.5 7.7v3.8c0 3.5-2.2 6.2-5.5 7.3-3.3-1.1-5.5-3.8-5.5-7.3V7.7L12 5.2z" fill="url(#giDark)" />
+        <polygon points="12,7.8 14.5,10.6 13.6,15.4 12,16.3 10.4,15.4 9.5,10.6" fill="url(#giCyan)" />
+      </symbol>
+
+      <symbol id="icon-magnet" viewBox="0 0 24 24">
+        <path d="M6 5v6.5a6 6 0 0 0 12 0V5h-3.6v6.5a2.4 2.4 0 0 1-4.8 0V5H6z" fill="url(#giFlame)" stroke="#fffbeb" stroke-width="1.1" />
+        <rect x="6" y="4" width="3.6" height="3.2" rx="0.6" fill="url(#giSteel)" />
+        <rect x="14.4" y="4" width="3.6" height="3.2" rx="0.6" fill="url(#giSteel)" />
+        <path d="M3 3.5c-.8 1-.8 2.4 0 3.4M21 3.5c.8 1 .8 2.4 0 3.4" fill="none" stroke="url(#giCyan)" stroke-width="1.6" stroke-linecap="round" />
+      </symbol>
+
+      <symbol id="icon-bike" viewBox="0 0 24 24">
+        <circle cx="6.2" cy="16.5" r="3.5" fill="none" stroke="url(#giCyan)" stroke-width="2" />
+        <circle cx="17.8" cy="16.5" r="3.5" fill="none" stroke="url(#giCyan)" stroke-width="2" />
+        <path d="M6.2 16.5L10 10.5h4.5l3.3 6M13.5 10.5l1.8-3h2.2" fill="none" stroke="url(#giGold)" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round" />
+        <path d="M9.2 10.2l3.8.3-1.4 3.4z" fill="url(#giFlame)" />
+      </symbol>
     </defs>
   </svg>
 
   <main id="app-container" aria-label="Bendskin Rush Game Viewport">
-    <!-- Layer 0: Crisp Full-Screen HTML5 Game Canvas -->
+    <!-- Layer 0: Real WebGL 3D Engine Canvas (Ultra HD) + HTML5 2.5D/Overlay Canvas -->
+    <canvas id="game-canvas-3d" class="hidden"></canvas>
     <canvas id="game-canvas"></canvas>
 
     <!-- Layer 1: Minimalist HTML/CSS UI Overlay Screens -->
@@ -180,13 +216,13 @@
                 <span id="hud-best" class="hud-value">0 m</span>
               </div>
               <div class="hud-pill hud-bonus-pill">
-                <span class="hud-label">LOOT</span>
-                <span id="hud-bonus" class="hud-value">+0</span>
+                <span class="hud-label">COINS</span>
+                <span id="hud-coins" class="hud-value">0</span>
               </div>
             </div>
 
             <div class="hud-actions">
-              <button id="btn-pause" class="btn-sound-toggle" type="button" aria-label="Pause game" title="Pause Game (Space / P)">
+              <button id="btn-pause" class="btn-sound-toggle" type="button" aria-label="Pause game" title="Pause Game (Esc / P)">
                 <svg class="game-svg-icon"><use href="#icon-pause"></use></svg>
               </button>
               <button id="btn-hud-settings" class="btn-sound-toggle" type="button" aria-label="Open settings" title="Settings">
@@ -202,17 +238,19 @@
             <div class="hud-badges">
               <span id="hud-speed" class="hud-mini-badge speed-badge">60 km/h</span>
               <span id="hud-gear-badge" class="hud-mini-badge gear-badge">G1</span>
-              <span id="hud-quality-badge" class="hud-mini-badge quality-badge">ULTRA HD+</span>
+              <span id="hud-quality-badge" class="hud-mini-badge quality-badge">ULTRA 3D</span>
               <span id="hud-fps" class="hud-mini-badge fps-badge">60 FPS</span>
               <button id="btn-hud-tilt" class="hud-mini-badge tilt-badge" type="button" title="Toggle or Recenter Phone Tilt Steering">
                 <svg class="game-svg-icon icon-sm"><use href="#icon-tilt"></use></svg>
-                <span class="btn-arcade-label">TILT: ON</span>
+                <span class="btn-arcade-label">TILT: OFF</span>
               </button>
             </div>
             <button id="btn-test-gameover" class="btn-test-crash" type="button" title="Preview Game Over screen">
               Test Crash
             </button>
           </div>
+
+          <div id="hud-powerups" class="hud-powerups hidden" aria-label="Active power-ups"></div>
         </header>
 
         <div id="hud-rival-pill" class="hud-rival-pill hidden">RIVAL: 0m</div>
@@ -224,7 +262,7 @@
               <div id="hud-combo-fill" class="combo-bar-fill"></div>
             </div>
           </div>
-          <div id="hud-hint-pill" class="hud-hint-pill">&lt;/&gt; Arrows or Swipe to Steer • H / Horn • Space / Pause</div>
+          <div id="hud-hint-pill" class="hud-hint-pill">&lt;/&gt; Arrows to Steer • Hold SPACE for Horn • ESC Pause</div>
         </footer>
 
         <div id="hud-pedals" class="hud-pedals" aria-label="Steering and speed controls">
@@ -239,9 +277,9 @@
             </button>
           </div>
           <div class="hud-speed-cluster" role="group" aria-label="Horn, Gas and Brake Pedals">
-            <button id="btn-horn" class="thumb-pedal pedal-horn" type="button" aria-label="Honk horn" title="Honk Horn (H)">
+            <button id="btn-horn" class="thumb-pedal pedal-horn" type="button" aria-label="Hold to honk horn" title="Hold Horn (Space / H)">
               <span class="pedal-title">HORN</span>
-              <span class="pedal-sub">BEEP</span>
+              <span class="pedal-sub">HOLD</span>
             </button>
             <button id="pedal-brake" class="thumb-pedal pedal-brake" type="button" aria-label="Brake pedal">
               <span class="pedal-title">BRAKE</span>
@@ -302,41 +340,50 @@
         </div>
 
         <div class="home-bottom-stack">
-          <div id="home-account-bar" class="home-account-bar">
-            <div class="home-account-info">
-              <span id="home-account-badge" class="account-mode-badge guest">GUEST</span>
-              <span id="home-account-name" class="home-account-name">Guest Rider</span>
-              <span class="account-sep">•</span>
-              <svg class="game-svg-icon icon-xs" aria-hidden="true"><use href="#icon-pin"></use></svg>
-              <span id="home-account-location" class="home-account-location">Choose Location</span>
-            </div>
-            <button id="btn-open-account" class="btn-account-pill" type="button">
-              <svg class="game-svg-icon icon-sm"><use href="#icon-rider"></use></svg>
-              <span class="btn-arcade-label">Account / Location</span>
-            </button>
+          <div class="home-coin-chip">
+            <svg class="game-svg-icon icon-sm" aria-hidden="true"><use href="#icon-coin"></use></svg>
+            <span class="btn-arcade-label">BANK:</span>
+            <span id="home-coin-bank" class="home-coin-count">0</span>
+            <span>COINS</span>
           </div>
 
           <div class="action-stack home-menu-grid">
-            <button id="btn-start" class="btn-primary home-play-btn" type="button">
-              <svg class="game-svg-icon"><use href="#icon-play"></use></svg>
+            <button id="btn-start" class="btn-primary home-play-btn home-clean-btn" type="button">
+              <span class="play-btn-sweep" aria-hidden="true"></span>
+              <svg class="game-svg-icon home-icon-anim-play"><use href="#icon-play"></use></svg>
               <span class="btn-arcade-label">PLAY</span>
             </button>
-            <button id="btn-open-leaderboard" class="btn-secondary" type="button">
-              <svg class="game-svg-icon"><use href="#icon-trophy"></use></svg>
-              <span class="btn-arcade-label">LEADERBOARD</span>
-            </button>
-            <button id="btn-open-settings" class="btn-secondary" type="button">
+            <div class="home-two-col-row">
+              <button id="btn-open-leaderboard" class="btn-secondary home-clean-btn home-anim-trophy" type="button">
+                <svg class="game-svg-icon"><use href="#icon-trophy"></use></svg>
+                <span class="btn-arcade-label">LEADERBOARD</span>
+              </button>
+              <button id="btn-open-garage" class="btn-secondary home-clean-btn home-anim-bike" type="button">
+                <svg class="game-svg-icon"><use href="#icon-bike"></use></svg>
+                <span class="btn-arcade-label">GARAGE</span>
+              </button>
+            </div>
+            <button id="btn-open-settings" class="btn-secondary home-clean-btn home-anim-gear" type="button">
               <svg class="game-svg-icon"><use href="#icon-gear"></use></svg>
               <span class="btn-arcade-label">SETTINGS</span>
             </button>
-            <button id="btn-open-about" class="btn-secondary" type="button">
-              <svg class="game-svg-icon"><use href="#icon-info"></use></svg>
-              <span class="btn-arcade-label">ABOUT US</span>
-            </button>
+            <div class="home-bottom-row">
+              <button id="btn-open-account" class="btn-secondary home-clean-btn home-account-shared-btn" type="button">
+                <svg class="game-svg-icon icon-sm"><use href="#icon-rider"></use></svg>
+                <span id="home-account-badge" class="account-mode-badge guest">GUEST</span>
+                <span id="home-account-name" class="home-account-name">Guest Rider</span>
+                <span class="account-sep">•</span>
+                <span id="home-account-location" class="home-account-location">Location</span>
+              </button>
+              <button id="btn-open-about" class="btn-secondary home-clean-btn home-anim-info" type="button">
+                <svg class="game-svg-icon"><use href="#icon-info"></use></svg>
+                <span class="btn-arcade-label">ABOUT US</span>
+              </button>
+            </div>
           </div>
 
           <nav class="policy-footer-links" aria-label="Game information and legal policies">
-            <button class="policy-link" type="button" data-about-tab="about">About</button>
+            <button class="policy-link" type="button" data-about-tab="about">About &amp; Controls</button>
             <span aria-hidden="true">•</span>
             <button class="policy-link" type="button" data-about-tab="privacy">Privacy Policy</button>
             <span aria-hidden="true">•</span>
@@ -763,22 +810,73 @@
                 <span class="btn-arcade-label">Sound Effects: ON</span>
               </button>
             </div>
-
-            <div class="settings-group">
-              <div class="settings-label-row">
-                <label class="settings-label" for="input-adsense-pub">Google AdSense Publisher ID</label>
-                <span id="adsense-status-badge" class="settings-badge">Not Linked</span>
-              </div>
-              <input id="input-adsense-pub" class="onboarding-input" type="text" maxlength="28" autocomplete="off" placeholder="ca-pub-XXXXXXXXXXXXXXXX" aria-label="Google AdSense Publisher ID">
-              <p class="settings-hint">
-                Optional: paste your approved <code>ca-pub-...</code> ID to activate Google AdSense script tags on live domains (and update <code>ads.txt</code>).
-              </p>
-            </div>
           </div>
 
           <button id="btn-save-settings" class="btn-primary settings-done-btn" type="button">
             DONE
           </button>
+        </div>
+      </section>
+
+      <!-- 6B. Bikes & Upgrades Garage Modal (Coming Soon Preview) -->
+      <section id="garage-modal" class="ui-modal hidden" role="dialog" aria-modal="true" aria-labelledby="garage-heading">
+        <div class="modal-card garage-modal-card">
+          <div class="modal-header">
+            <div>
+              <span class="modal-kicker">BIKES &amp; PERFORMANCE UPGRADES</span>
+              <h2 id="garage-heading" class="modal-title">
+                <svg class="game-svg-icon"><use href="#icon-bike"></use></svg>
+                <span>MOTO GARAGE</span>
+              </h2>
+            </div>
+            <button id="btn-close-garage" class="btn-close-modal" type="button" aria-label="Close Garage">
+              <svg class="game-svg-icon"><use href="#icon-close"></use></svg>
+            </button>
+          </div>
+
+          <div class="garage-bank-banner">
+            <div class="garage-bank-left">
+              <svg class="game-svg-icon"><use href="#icon-coin"></use></svg>
+              <span>Your Coin Bank:</span>
+            </div>
+            <strong id="garage-coin-balance" class="garage-coin-total">0 COINS</strong>
+          </div>
+
+          <div class="garage-grid">
+            <article class="garage-card active-bike">
+              <div class="garage-card-top">
+                <strong>Bendskin Classic 125</strong>
+                <span class="garage-tag owned">ACTIVE</span>
+              </div>
+              <p>Nimble city street bike tuned for Douala &amp; Bamenda traffic weaving.</p>
+            </article>
+
+            <article class="garage-card soon">
+              <div class="garage-card-top">
+                <strong>Okada Sport 250</strong>
+                <span class="garage-tag soon">COMING SOON</span>
+              </div>
+              <p>Sharper lean handling, reinforced suspension &amp; faster acceleration (500 Coins).</p>
+            </article>
+
+            <article class="garage-card soon">
+              <div class="garage-card-top">
+                <strong>Douala Superbike 600</strong>
+                <span class="garage-tag soon">COMING SOON</span>
+              </div>
+              <p>Twin-exhaust superbike with extended Nitro &amp; Shield duration (1,500 Coins).</p>
+            </article>
+
+            <article class="garage-card soon">
+              <div class="garage-card-top">
+                <strong>Workshop Upgrades</strong>
+                <span class="garage-tag soon">COMING SOON</span>
+              </div>
+              <p>Upgrade Top Speed, Nitro Fuel Boost, Magnet Range &amp; Shield Core using your collected Coins!</p>
+            </article>
+          </div>
+
+          <p class="modal-footnote">Keep collecting Coins on the road (+10) &amp; Sharp Dodges (+1) — Shop unlocks soon!</p>
         </div>
       </section>
 
@@ -819,12 +917,13 @@
               <p>
                 <strong>Bendskin Rush</strong> is a lightweight, 60 FPS first-person urban motorcycle racing game built for instant play in mobile and desktop browsers. Weave between yellow taxis, commercial vans, timber trucks, potholes, and road barriers while chasing your personal best and city leaderboard rank.
               </p>
-              <h4>How to Ride &amp; Controls</h4>
+              <h4>How to Ride, Horn, Power-Ups &amp; Controls</h4>
               <ul>
-                <li><strong>Mobile Steering:</strong> Swipe left/right anywhere above the pedals or tap the left/right side of the road to switch lanes. Adjust threshold &amp; turn speed in <em>Settings</em>.</li>
-                <li><strong>Mobile Speed:</strong> In <em>Auto-Drive</em>, hold the bottom-left <strong>BRAKE</strong> pedal to scrub speed before dense traffic. Switch to <em>Manual Gas &amp; Brake</em> in Settings for dedicated <strong>GAS</strong> and <strong>BRAKE</strong> thumb pedals.</li>
-                <li><strong>Desktop Keyboard:</strong> <code>ArrowLeft</code> / <code>A</code> &amp; <code>ArrowRight</code> / <code>D</code> steer; <code>ArrowUp</code> / <code>W</code> accelerate throttle; <code>ArrowDown</code> / <code>S</code> engage front &amp; rear brakes; <code>P</code> or <code>Esc</code> pauses the race.</li>
-                <li><strong>Unlimited Close Calls &amp; Graphics:</strong> Swerve past traffic at the last instant to build unlimited <code>x2</code>, <code>x5</code>, <code>x10+</code> Sharp Dodge multipliers, and choose <em>Low 2D</em>, <em>Normal</em>, <em>High</em>, or <em>Ultra 3D</em> in Settings.</li>
+                <li><strong>Desktop Keyboard:</strong> <code>← / →</code> or <code>A / D</code> steer smoothly; <code>↑ / W</code> throttle; <code>↓ / S</code> brake; <strong>hold <code>Space</code></strong> for continuous Moto Horn (cars ahead move aside!); <code>Esc</code> or <code>P</code> opens Pause Menu (navigate with <code>↑ / ↓</code> and press <code>Enter</code>).</li>
+                <li><strong>Mobile Controls:</strong> Use left <code>&lt; / &gt;</code> arrow buttons or swipe to steer (enable smooth continuous <em>Phone Tilt</em> in Settings if desired). Hold <strong>HORN</strong> to clear traffic, and hold <strong>BRAKE</strong> / <strong>GAS</strong> on the right.</li>
+                <li><strong>Coins &amp; Garage:</strong> Collect spinning Gold Coins on the road (<code>+10 Coins</code>) and earn <code>+1 Coin</code> on every Sharp Dodge! Save Coins for upcoming bikes &amp; upgrades in the <strong>Garage</strong>.</li>
+                <li><strong>Timed Power-Ups:</strong> Grab <strong>Nitro Fuel</strong> for a timed high-speed surge, <strong>Shield</strong> for full obstacle immunity, and <strong>Magnet</strong> to pull all road coins straight to your bike!</li>
+                <li><strong>Real 3D Ultra HD:</strong> Choose <em>Low 2D</em>, <em>Normal</em>, <em>High 3D</em>, or <em>Ultra HD+ (Real WebGL 3D with detailed bike &amp; rider hands)</em> in Settings.</li>
               </ul>
             </article>
 
