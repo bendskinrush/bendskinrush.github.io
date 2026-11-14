@@ -58,7 +58,17 @@ body {
   }
 }
 
-/* Layer 0: Game Canvas */
+/* Layer 0: Real WebGL 3D Canvas + 2.5D/Overlay Canvas */
+#game-canvas-3d {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+  z-index: 0;
+  touch-action: none;
+}
+
 #game-canvas {
   position: absolute;
   inset: 0;
@@ -1760,4 +1770,360 @@ button:active {
   background: rgba(15, 23, 42, 0.8);
   color: #fde047;
   font-size: 11px;
+}
+
+/* =========================================================
+   Clean Shadow-Free Home Buttons, Custom Animations & Rows
+   ========================================================= */
+.home-coin-chip {
+  align-self: center;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 12px;
+  border-radius: 999px;
+  background: rgba(15, 23, 42, 0.86);
+  border: 1.5px solid rgba(250, 204, 21, 0.55);
+  color: #fde047;
+  font-size: 11px;
+  font-weight: 900;
+  letter-spacing: 0.05em;
+}
+
+.home-coin-count {
+  color: #ffffff;
+  font-variant-numeric: tabular-nums;
+}
+
+.home-clean-btn {
+  box-shadow: none !important;
+  text-shadow: none !important;
+  position: relative;
+  overflow: hidden;
+  backdrop-filter: none;
+}
+
+.home-play-btn {
+  background: linear-gradient(125deg, #facc15 0%, #f59e0b 48%, #facc15 100%);
+  background-size: 200% 200%;
+  border: 2px solid #fef08a;
+  color: #0f172a;
+  clip-path: polygon(10px 0%, 100% 0%, calc(100% - 10px) 100%, 0% 100%);
+  border-radius: 6px;
+  animation: playPulseFlow 3.2s ease-in-out infinite;
+}
+
+.play-btn-sweep {
+  position: absolute;
+  top: -40%;
+  left: -35%;
+  width: 34%;
+  height: 180%;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.52), transparent);
+  transform: rotate(22deg);
+  animation: playEnergySweep 2.6s ease-in-out infinite;
+  pointer-events: none;
+}
+
+@keyframes playEnergySweep {
+  0% {
+    left: -40%;
+  }
+  55%,
+  100% {
+    left: 130%;
+  }
+}
+
+@keyframes playPulseFlow {
+  0%,
+  100% {
+    background-position: 0% 50%;
+    transform: translateY(0);
+  }
+  50% {
+    background-position: 100% 50%;
+    transform: translateY(-1.5px);
+  }
+}
+
+.home-icon-anim-play {
+  animation: iconArrowNudge 1.6s ease-in-out infinite;
+}
+
+@keyframes iconArrowNudge {
+  0%,
+  100% {
+    transform: translateX(0);
+  }
+  50% {
+    transform: translateX(3px);
+  }
+}
+
+.home-two-col-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 7px;
+}
+
+.home-bottom-row {
+  display: grid;
+  grid-template-columns: 1.35fr 1fr;
+  gap: 7px;
+}
+
+.home-menu-grid .home-clean-btn.btn-secondary {
+  background: rgba(15, 23, 42, 0.9);
+  border: 1.5px solid rgba(148, 163, 184, 0.42);
+  padding: 9px 10px;
+  font-size: 12px;
+  transition: transform 0.16s ease, border-color 0.16s ease, background 0.16s ease;
+}
+
+.home-menu-grid .home-clean-btn.btn-secondary:hover {
+  transform: translateY(-2px);
+  border-color: rgba(250, 204, 21, 0.72);
+  background: rgba(30, 41, 59, 0.96);
+}
+
+.home-anim-trophy .game-svg-icon {
+  animation: trophyFloat 2.8s ease-in-out infinite;
+}
+
+.home-anim-bike .game-svg-icon {
+  animation: bikeRev 2.4s ease-in-out infinite;
+}
+
+.home-anim-gear .game-svg-icon {
+  animation: gearSpinSlow 9s linear infinite;
+}
+
+.home-anim-info .game-svg-icon {
+  animation: shieldBob 3s ease-in-out infinite;
+}
+
+@keyframes trophyFloat {
+  0%,
+  100% {
+    transform: translateY(0) scale(1);
+  }
+  50% {
+    transform: translateY(-2px) scale(1.06);
+  }
+}
+
+@keyframes bikeRev {
+  0%,
+  100% {
+    transform: rotate(0deg);
+  }
+  50% {
+    transform: rotate(-6deg);
+  }
+}
+
+@keyframes gearSpinSlow {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes shieldBob {
+  0%,
+  100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.08);
+  }
+}
+
+.home-account-shared-btn {
+  justify-content: flex-start !important;
+  gap: 5px !important;
+  padding: 9px 10px !important;
+  font-size: 11px !important;
+  border-color: rgba(56, 189, 248, 0.5) !important;
+}
+
+.home-account-shared-btn .home-account-name {
+  max-width: 68px;
+  font-size: 11px;
+}
+
+.home-account-shared-btn .home-account-location {
+  max-width: 62px;
+  font-size: 11px;
+}
+
+/* =========================================================
+   Active Power-Up Countdown Bars (Fuel, Shield, Magnet)
+   ========================================================= */
+.hud-powerups {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 2px;
+}
+
+.powerup-pill {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 8px;
+  border-radius: 10px;
+  background: rgba(15, 23, 42, 0.88);
+  border: 1.5px solid rgba(148, 163, 184, 0.35);
+  min-width: 112px;
+}
+
+.powerup-pill.fuel {
+  border-color: rgba(249, 115, 22, 0.78);
+}
+
+.powerup-pill.shield {
+  border-color: rgba(56, 189, 248, 0.8);
+}
+
+.powerup-pill.magnet {
+  border-color: rgba(244, 63, 94, 0.78);
+}
+
+.powerup-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1;
+}
+
+.powerup-label-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 6px;
+  font-size: 9px;
+  font-weight: 900;
+  letter-spacing: 0.05em;
+  color: #f8fafc;
+}
+
+.powerup-track {
+  width: 100%;
+  height: 4px;
+  border-radius: 999px;
+  background: rgba(148, 163, 184, 0.25);
+  overflow: hidden;
+}
+
+.powerup-fill {
+  height: 100%;
+  border-radius: 999px;
+  transition: width 0.08s linear;
+}
+
+.powerup-pill.fuel .powerup-fill {
+  background: linear-gradient(90deg, #f97316, #fde047);
+}
+
+.powerup-pill.shield .powerup-fill {
+  background: linear-gradient(90deg, #0ea5e9, #67e8f9);
+}
+
+.powerup-pill.magnet .powerup-fill {
+  background: linear-gradient(90deg, #f43f5e, #38bdf8);
+}
+
+/* =========================================================
+   Pause Keyboard Focus & Garage Modal Cards
+   ========================================================= */
+.pause-action-stack button.kb-focus {
+  outline: 2.5px solid #fde047;
+  outline-offset: 2px;
+  filter: brightness(1.1);
+  transform: scale(1.02);
+}
+
+.garage-bank-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: rgba(30, 41, 59, 0.82);
+  border: 1px solid rgba(250, 204, 21, 0.42);
+  font-size: 12px;
+  color: #e2e8f0;
+}
+
+.garage-bank-left {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-weight: 800;
+}
+
+.garage-coin-total {
+  color: #fde047;
+  font-size: 15px;
+  font-weight: 900;
+}
+
+.garage-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 8px;
+  overflow-y: auto;
+  max-height: 360px;
+}
+
+.garage-card {
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: rgba(30, 41, 59, 0.68);
+  border: 1px solid rgba(148, 163, 184, 0.25);
+}
+
+.garage-card.active-bike {
+  border-color: rgba(52, 211, 153, 0.65);
+  background: rgba(16, 185, 129, 0.14);
+}
+
+.garage-card-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 4px;
+  font-size: 13px;
+  color: #ffffff;
+}
+
+.garage-card p {
+  margin: 0;
+  font-size: 11px;
+  line-height: 1.4;
+  color: #cbd5e1;
+}
+
+.garage-tag {
+  padding: 2px 7px;
+  border-radius: 999px;
+  font-size: 9px;
+  font-weight: 900;
+  letter-spacing: 0.06em;
+}
+
+.garage-tag.owned {
+  background: rgba(16, 185, 129, 0.24);
+  color: #6ee7b7;
+  border: 1px solid rgba(52, 211, 153, 0.5);
+}
+
+.garage-tag.soon {
+  background: rgba(250, 204, 21, 0.18);
+  color: #fde047;
+  border: 1px solid rgba(250, 204, 21, 0.45);
 }
