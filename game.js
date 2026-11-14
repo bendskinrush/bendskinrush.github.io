@@ -21,8 +21,15 @@
   const SPEED_CURVE = {
     LAUNCH_KMH: 60,
     MANUAL_LAUNCH_KMH: 40,
-    MAX_KMH: 165,
-    AUTO_TOP_KMH: 160,
+    MAX_KMH: 205,
+    AUTO_TOP_KMH: 168,
+    NITRO_BONUS_KMH: 36,
+  };
+
+  const POWERUPS = {
+    FUEL_DURATION: 5.5,
+    SHIELD_DURATION: 7.0,
+    MAGNET_DURATION: 8.0,
   };
 
   const WORLD_SPACE = {
@@ -62,11 +69,12 @@
   const GRAPHICS_DESCRIPTIONS = {
     low: 'Low 2D active: flat high-contrast 2D shapes, minimal shadows & particles for peak FPS on older phones.',
     normal: 'Normal quality: classic 2.5D shaded vehicles and smooth road lighting with balanced battery use.',
-    high: 'High 3D active: true perspective 3D extruded vehicles, raised 3D curbs & kiosks, sunbeams, and crisp 2x sharpness.',
-    ultra: 'Ultra HD+ active: 3D multi-story city buildings, billboards, truck cabs, dynamic lights, mirror reflections & max 3x sharpness.',
+    high: 'High 3D active: perspective-extruded 3D vehicles, raised curbs & buildings, headbeams, mirrors & crisp 2x sharpness.',
+    ultra: 'Ultra HD 3D Engine: true real-time WebGL 3D world with articulated rider hands & armored gloves, sunlit shadows, textures & realistic traffic.',
   };
 
-  // Uniform metadata table: stationary hazards stay at speedKmh: 0 (world-locked)
+  // Uniform metadata table: stationary hazards stay at speedKmh: 0 (world-locked),
+  // traffic moves forward at constant world speeds so braking always lets cars pull ahead.
   const ENTITY_CONFIG = {
     pothole: {
       kind: 'hazard',
@@ -96,7 +104,7 @@
     yellow_taxi: {
       kind: 'hazard',
       isVehicle: true,
-      speedKmh: 46,
+      speedKmh: 54,
       width: 78,
       height: 66,
       laneHalfSpan: 0.34,
@@ -104,7 +112,7 @@
     timber_truck: {
       kind: 'hazard',
       isVehicle: true,
-      speedKmh: 34,
+      speedKmh: 46,
       width: 92,
       height: 108,
       laneHalfSpan: 0.36,
@@ -112,7 +120,7 @@
     clando_van: {
       kind: 'hazard',
       isVehicle: true,
-      speedKmh: 52,
+      speedKmh: 60,
       width: 82,
       height: 82,
       laneHalfSpan: 0.34,
@@ -120,7 +128,7 @@
     rival_moto: {
       kind: 'hazard',
       isVehicle: true,
-      speedKmh: 62,
+      speedKmh: 68,
       width: 52,
       height: 64,
       laneHalfSpan: 0.28,
@@ -131,19 +139,29 @@
       speedKmh: 0,
       width: 34,
       height: 40,
-      bonusMeters: 75,
-      label: '+75m FUEL!',
-      color: '#ef4444',
+      coins: 0,
+      label: 'NITRO SPEED BOOST!',
+      color: '#f97316',
     },
-    plantain: {
+    shield: {
       kind: 'collectible',
       isVehicle: false,
       speedKmh: 0,
-      width: 38,
+      width: 36,
+      height: 38,
+      coins: 0,
+      label: 'IMMUNITY SHIELD!',
+      color: '#38bdf8',
+    },
+    magnet: {
+      kind: 'collectible',
+      isVehicle: false,
+      speedKmh: 0,
+      width: 36,
       height: 36,
-      bonusMeters: 50,
-      label: '+50m BOOST!',
-      color: '#84cc16',
+      coins: 0,
+      label: 'COIN MAGNET!',
+      color: '#fb7185',
     },
     coin: {
       kind: 'collectible',
@@ -151,8 +169,8 @@
       speedKmh: 0,
       width: 32,
       height: 32,
-      bonusMeters: 35,
-      label: '+35m GOLD COIN!',
+      coins: 10,
+      label: '+10 COINS!',
       color: '#facc15',
     },
   };
@@ -166,7 +184,7 @@
     'clando_van',
     'rival_moto',
   ];
-  const COLLECTIBLE_TYPES = ['fuel_can', 'plantain', 'coin'];
+  const COLLECTIBLE_TYPES = ['coin', 'fuel_can', 'shield', 'magnet'];
 
   const GAME_STATE = {
     START: 'START',
@@ -179,6 +197,8 @@
   const STORAGE_PROFILE_KEY = 'bendskin_rush_profile_v2';
   const STORAGE_LEADERBOARD_KEY = 'bendskin_rush_leaderboard_v2_real';
   const STORAGE_SETTINGS_KEY = 'bendskin_rush_settings_v2';
+  const STORAGE_COINS_KEY = 'bendskin_rush_coins_v1';
+  const ADSENSE_BACKGROUND_PUB_ID = 'ca-pub-4032050439057511';
 
   const API_ORIGIN =
     window.location.hostname.endsWith('.workers.dev') ||
@@ -241,8 +261,9 @@
   // 2. DOM Elements
   // =========================================================
   const appContainer = document.getElementById('app-container');
+  const canvas3d = document.getElementById('game-canvas-3d');
   const canvas = document.getElementById('game-canvas');
-  const ctx = canvas.getContext('2d', { alpha: false });
+  const ctx = canvas.getContext('2d', { alpha: true });
 
   const hudScreen = document.getElementById('hud-screen');
   const startScreen = document.getElementById('start-screen');
@@ -252,7 +273,8 @@
 
   const hudScoreEl = document.getElementById('hud-score');
   const hudBestEl = document.getElementById('hud-best');
-  const hudBonusEl = document.getElementById('hud-bonus');
+  const hudCoinsEl = document.getElementById('hud-coins');
+  const hudPowerupsEl = document.getElementById('hud-powerups');
   const hudSpeedEl = document.getElementById('hud-speed');
   const hudGearBadgeEl = document.getElementById('hud-gear-badge');
   const hudQualityBadgeEl = document.getElementById('hud-quality-badge');
@@ -286,11 +308,15 @@
   const btnEditProfile = document.getElementById('btn-edit-profile');
   const btnGameoverAccount = document.getElementById('btn-gameover-account');
 
-  const homeAccountBar = document.getElementById('home-account-bar');
+  const homeCoinBankEl = document.getElementById('home-coin-bank');
   const homeAccountBadge = document.getElementById('home-account-badge');
   const homeAccountName = document.getElementById('home-account-name');
   const homeAccountLocation = document.getElementById('home-account-location');
   const btnOpenAccount = document.getElementById('btn-open-account');
+  const btnOpenGarage = document.getElementById('btn-open-garage');
+  const garageModal = document.getElementById('garage-modal');
+  const btnCloseGarage = document.getElementById('btn-close-garage');
+  const garageCoinBalanceEl = document.getElementById('garage-coin-balance');
 
   const accountModal = document.getElementById('account-modal');
   const btnCloseAccount = document.getElementById('btn-close-account');
@@ -361,8 +387,6 @@
   const sliderSensitivity = document.getElementById('slider-sensitivity');
   const sensitivityValueEl = document.getElementById('sensitivity-value');
   const btnSettingsSound = document.getElementById('btn-settings-sound');
-  const inputAdsensePub = document.getElementById('input-adsense-pub');
-  const adsenseStatusBadge = document.getElementById('adsense-status-badge');
   const adSlotHome = document.getElementById('ad-slot-home');
   const adSlotGameover = document.getElementById('ad-slot-gameover');
 
@@ -657,6 +681,79 @@
       }
     }
 
+    let activeHornNodes = null;
+
+    function stopContinuousHorn() {
+      if (!activeHornNodes) return;
+      const nodes = activeHornNodes;
+      activeHornNodes = null;
+      try {
+        const ctxAudio = ensureContext();
+        const now = ctxAudio ? ctxAudio.currentTime : 0;
+        if (nodes.gain && ctxAudio) {
+          nodes.gain.gain.cancelScheduledValues(now);
+          nodes.gain.gain.setValueAtTime(Math.max(0.0001, nodes.gain.gain.value || 0.08), now);
+          nodes.gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.05);
+        }
+        window.setTimeout(() => {
+          [nodes.oscA, nodes.oscB].forEach((osc) => {
+            if (!osc) return;
+            try {
+              osc.stop();
+              osc.disconnect();
+            } catch {
+              // Already stopped
+            }
+          });
+          if (nodes.filter) {
+            try { nodes.filter.disconnect(); } catch {}
+          }
+          if (nodes.gain) {
+            try { nodes.gain.disconnect(); } catch {}
+          }
+        }, 70);
+      } catch {
+        // No-op
+      }
+    }
+
+    function startContinuousHorn() {
+      if (muted) return;
+      unlock();
+      if (activeHornNodes) return;
+      try {
+        const ctxAudio = ensureContext();
+        if (!ctxAudio) return;
+        const now = ctxAudio.currentTime;
+        const oscA = ctxAudio.createOscillator();
+        const oscB = ctxAudio.createOscillator();
+        const filter = ctxAudio.createBiquadFilter();
+        const gain = ctxAudio.createGain();
+
+        oscA.type = 'sawtooth';
+        oscA.frequency.setValueAtTime(482, now);
+        oscB.type = 'square';
+        oscB.frequency.setValueAtTime(612, now);
+
+        filter.type = 'lowpass';
+        filter.frequency.setValueAtTime(2100, now);
+
+        gain.gain.setValueAtTime(0.0001, now);
+        gain.gain.linearRampToValueAtTime(0.11, now + 0.035);
+
+        oscA.connect(filter);
+        oscB.connect(filter);
+        filter.connect(gain);
+        gain.connect(ctxAudio.destination);
+
+        oscA.start(now);
+        oscB.start(now);
+        activeHornNodes = { oscA, oscB, filter, gain };
+      } catch {
+        activeHornNodes = null;
+      }
+    }
+
     function playHorn() {
       if (muted) return;
       unlock();
@@ -669,7 +766,11 @@
 
     function setMuted(nextMuted) {
       muted = Boolean(nextMuted);
-      if (!muted) unlock();
+      if (muted) {
+        stopContinuousHorn();
+      } else {
+        unlock();
+      }
       return muted;
     }
 
@@ -689,6 +790,8 @@
       playBump,
       playCrash,
       playHorn,
+      startContinuousHorn,
+      stopContinuousHorn,
       setMuted,
       toggleMute,
       isMuted: () => muted,
@@ -1256,10 +1359,7 @@
 
   let adsenseScriptLoadedFor = '';
   function initAdSense(pubId) {
-    const validId = normalizeAdsenseId(pubId);
-    if (adsenseStatusBadge) {
-      adsenseStatusBadge.textContent = validId ? 'Connected' : 'Not Linked';
-    }
+    const validId = normalizeAdsenseId(pubId) || ADSENSE_BACKGROUND_PUB_ID;
     if (!validId) return;
 
     const host = window.location.hostname || '';
@@ -1294,6 +1394,24 @@
     });
   }
 
+  function loadCoinBank() {
+    try {
+      const saved = localStorage.getItem(STORAGE_COINS_KEY);
+      const parsed = saved ? parseInt(saved, 10) : 0;
+      return Number.isFinite(parsed) && parsed > 0 ? parsed : 0;
+    } catch {
+      return 0;
+    }
+  }
+
+  function saveCoinBank(value) {
+    try {
+      localStorage.setItem(STORAGE_COINS_KEY, String(Math.max(0, Math.floor(value))));
+    } catch {
+      // Ignore storage errors
+    }
+  }
+
   let currentState = GAME_STATE.START;
   let lastTimestamp = 0;
 
@@ -1303,12 +1421,23 @@
   let speedKmh = SPEED_CURVE.LAUNCH_KMH;
   let distanceMeters = 0;
   let bestMeters = loadBestScore();
+  let savedCoinBank = loadCoinBank();
+  let runCoins = 0;
   let targetBestLineMeters = bestMeters;
   let passedBestThisRun = false;
   let bonusMetersTotal = 0;
   let selectedCityFilter = 'All';
   let activeLeaderboardTab = 'riders';
   let revivedThisRun = false;
+
+  // Timed Power-Ups (seconds remaining)
+  let fuelBoostTimer = 0;
+  let shieldTimer = 0;
+  let magnetTimer = 0;
+  let hornHeld = false;
+  let hornYieldTimer = 0;
+  let pauseFocusIndex = 0;
+  let ultra3DEnabled = false;
 
   // Run anti-cheat telemetry
   let runDurationSeconds = 0;
@@ -1459,6 +1588,22 @@
     }
   }
 
+  function syncUltra3DMode(cssWidth, cssHeight) {
+    const wantsUltra = userSettings.graphicsQuality === 'ultra';
+    const engine = window.BendskinUltra3D;
+    let ready = false;
+    if (wantsUltra && canvas3d && engine && engine.isSupported()) {
+      ready = engine.init(canvas3d);
+      if (ready && typeof cssWidth === 'number' && typeof cssHeight === 'number') {
+        engine.resize(cssWidth, cssHeight);
+      }
+    }
+    ultra3DEnabled = ready;
+    if (canvas3d) {
+      canvas3d.classList.toggle('hidden', !ultra3DEnabled);
+    }
+  }
+
   function resizeCanvas() {
     const rect = appContainer.getBoundingClientRect();
     const cssWidth = Math.max(1, rect.width);
@@ -1472,6 +1617,8 @@
 
     const scale = (cssWidth * dpr) / LOGICAL_WIDTH;
     ctx.setTransform(scale, 0, 0, scale, 0, 0);
+
+    syncUltra3DMode(cssWidth, cssHeight);
   }
 
   window.addEventListener('resize', resizeCanvas);
@@ -1695,9 +1842,7 @@
     el.addEventListener('pointerleave', release);
   }
 
-  let lastHornAtMs = 0;
-
-  function isLaneClearForVehicle(targetLaneIdx, worldZ, ignoreEntity) {
+  function isLaneClearForVehicle(targetLaneIdx, worldZ, ignoreEntity, bandMeters = 18) {
     if (targetLaneIdx < 0 || targetLaneIdx > 2) return false;
     for (let i = 0; i < entities.length; i += 1) {
       const other = entities[i];
@@ -1707,7 +1852,7 @@
         typeof other.visualLane === 'number' ? other.visualLane : other.lane
       );
       if (other.lane === targetLaneIdx || otherLane === targetLaneIdx) {
-        if (Math.abs(other.worldZ - worldZ) < 18) {
+        if (Math.abs(other.worldZ - worldZ) < bandMeters) {
           return false;
         }
       }
@@ -1715,10 +1860,29 @@
     return true;
   }
 
+  function getOccupiedOtherLanesSet(laneIdx, worldZ, ignoreEntity, bandMeters = 16) {
+    const occupied = new Set();
+    for (let i = 0; i < entities.length; i += 1) {
+      const other = entities[i];
+      if (other === ignoreEntity) continue;
+      if (ENTITY_CONFIG[other.type].kind !== 'hazard') continue;
+      if (Math.abs(other.worldZ - worldZ) < bandMeters) {
+        const otherLane = Math.round(
+          typeof other.visualLane === 'number' ? other.visualLane : other.lane
+        );
+        if (other.lane !== laneIdx) occupied.add(other.lane);
+        if (otherLane !== laneIdx) occupied.add(otherLane);
+      }
+    }
+    return occupied;
+  }
+
   function tryYieldVehicleLane(entity) {
     if (!entity || ENTITY_CONFIG[entity.type].speedKmh <= 0) return false;
-    const candidates = [entity.lane - 1, entity.lane + 1].filter((laneIdx) =>
-      isLaneClearForVehicle(laneIdx, entity.worldZ, entity)
+    const candidates = [entity.lane - 1, entity.lane + 1].filter(
+      (laneIdx) =>
+        isLaneClearForVehicle(laneIdx, entity.worldZ, entity, 18) &&
+        getOccupiedOtherLanesSet(laneIdx, entity.worldZ, entity, 17).size < 2
     );
     if (candidates.length === 0) return false;
 
@@ -1733,13 +1897,8 @@
     return true;
   }
 
-  function triggerHorn() {
+  function clearTrafficAheadWithHorn(showPopup) {
     if (currentState !== GAME_STATE.PLAYING) return;
-    const now = performance.now();
-    if (now - lastHornAtMs < 240) return;
-    lastHornAtMs = now;
-
-    sound.playHorn();
     let clearedCount = 0;
     for (let i = 0; i < entities.length; i += 1) {
       const entity = entities[i];
@@ -1747,18 +1906,44 @@
       if (cfg.speedKmh <= 0) continue;
       const distAhead = entity.worldZ - playerZ;
       const entityLane = typeof entity.visualLane === 'number' ? entity.visualLane : entity.lane;
-      if (distAhead > 2 && distAhead < 72 && Math.abs(entityLane - currentLane) < 0.85) {
+      if (distAhead > 2 && distAhead < 78 && Math.abs(entityLane - currentLane) < 0.85) {
         if (tryYieldVehicleLane(entity)) {
           clearedCount += 1;
         }
       }
     }
-    addPopup(
-      clearedCount > 0 ? 'BEEP! MOVING!' : 'BEEP BEEP!',
-      getHandlebarBaseX(),
-      getBottomY() - 165,
-      '#fde047'
-    );
+    if (showPopup) {
+      addPopup(
+        clearedCount > 0 ? 'HORN! LANE CLEAR!' : 'HOOOORN!',
+        getHandlebarBaseX(),
+        getBottomY() - 165,
+        '#fde047'
+      );
+    }
+  }
+
+  function startHorn() {
+    if (currentState !== GAME_STATE.PLAYING) return;
+    sound.unlock();
+    const firstPress = !hornHeld;
+    hornHeld = true;
+    if (btnHornEl) btnHornEl.classList.add('pressed');
+    sound.startContinuousHorn();
+    if (firstPress) {
+      hornYieldTimer = 0.24;
+      clearTrafficAheadWithHorn(true);
+    }
+  }
+
+  function stopHorn() {
+    hornHeld = false;
+    hornYieldTimer = 0;
+    if (btnHornEl) btnHornEl.classList.remove('pressed');
+    sound.stopContinuousHorn();
+  }
+
+  function triggerHorn() {
+    startHorn();
   }
 
   bindThumbPedal(pedalBrakeEl, 'brake');
@@ -1769,13 +1954,11 @@
     const pressHorn = (e) => {
       e.preventDefault();
       e.stopPropagation();
-      sound.unlock();
-      btnHornEl.classList.add('pressed');
-      triggerHorn();
+      startHorn();
     };
     const releaseHorn = (e) => {
       if (e) e.stopPropagation();
-      btnHornEl.classList.remove('pressed');
+      stopHorn();
     };
     btnHornEl.addEventListener('pointerdown', pressHorn);
     btnHornEl.addEventListener('pointerup', releaseHorn);
@@ -1974,6 +2157,27 @@
   document.addEventListener('gesturestart', (e) => e.preventDefault(), { passive: false });
   document.addEventListener('gesturechange', (e) => e.preventDefault(), { passive: false });
 
+  function getPauseMenuButtons() {
+    return [btnResume, btnPauseSettings, btnPauseRestart, btnPauseHome].filter(Boolean);
+  }
+
+  function setPauseMenuFocus(nextIdx) {
+    const buttons = getPauseMenuButtons();
+    if (buttons.length === 0) return;
+    pauseFocusIndex = ((nextIdx % buttons.length) + buttons.length) % buttons.length;
+    buttons.forEach((btn, idx) => {
+      const focused = idx === pauseFocusIndex;
+      btn.classList.toggle('kb-focus', focused);
+      if (focused) {
+        try {
+          btn.focus({ preventScroll: true });
+        } catch {
+          // Ignore focus failures
+        }
+      }
+    });
+  }
+
   window.addEventListener('keydown', (event) => {
     sound.unlock();
 
@@ -1988,30 +2192,60 @@
       !leaderboardModal.classList.contains('hidden') ||
       (accountModal && !accountModal.classList.contains('hidden')) ||
       (settingsModal && !settingsModal.classList.contains('hidden')) ||
+      (garageModal && !garageModal.classList.contains('hidden')) ||
       (aboutModal && !aboutModal.classList.contains('hidden'))
     ) {
       if (event.code === 'Escape') {
+        event.preventDefault();
         closeLeaderboard();
         closeAccountModal();
         closeSettings();
+        if (garageModal) garageModal.classList.add('hidden');
         closeAbout();
       }
       return;
     }
 
     if (currentState === GAME_STATE.PAUSED) {
-      if (event.repeat) return;
-      if (event.code === 'Space' || event.code === 'Escape' || event.code === 'KeyP') {
+      const buttons = getPauseMenuButtons();
+      if (event.code === 'Escape' || event.code === 'KeyP') {
+        if (event.repeat) return;
         event.preventDefault();
         resumeGame();
+        return;
+      }
+      if (event.code === 'ArrowUp' || event.code === 'KeyW' || event.code === 'ArrowLeft') {
+        event.preventDefault();
+        setPauseMenuFocus(pauseFocusIndex - 1);
+        return;
+      }
+      if (event.code === 'ArrowDown' || event.code === 'KeyS' || event.code === 'ArrowRight') {
+        event.preventDefault();
+        setPauseMenuFocus(pauseFocusIndex + 1);
+        return;
+      }
+      if (event.code === 'Tab') {
+        event.preventDefault();
+        setPauseMenuFocus(pauseFocusIndex + (event.shiftKey ? -1 : 1));
+        return;
+      }
+      if ((event.code === 'Enter' || event.code === 'Space') && !event.repeat) {
+        event.preventDefault();
+        const activeBtn = buttons[pauseFocusIndex] || buttons[0];
+        if (activeBtn) activeBtn.click();
       }
       return;
     }
 
     if (currentState === GAME_STATE.PLAYING) {
-      if ((event.code === 'Space' || event.code === 'KeyP' || event.code === 'Escape') && !event.repeat) {
+      if ((event.code === 'Escape' || event.code === 'KeyP') && !event.repeat) {
         event.preventDefault();
         pauseGame(true);
+        return;
+      }
+      if (event.code === 'Space' || event.code === 'KeyH' || event.code === 'KeyE') {
+        event.preventDefault();
+        if (!event.repeat) startHorn();
         return;
       }
       if (event.code === 'ArrowUp' || event.code === 'KeyW') {
@@ -2031,9 +2265,6 @@
       } else if (event.code === 'ArrowRight' || event.code === 'KeyD') {
         event.preventDefault();
         steerBy(1, false);
-      } else if (event.code === 'KeyH' || event.code === 'KeyE') {
-        event.preventDefault();
-        triggerHorn();
       }
     } else if ((event.code === 'Space' || event.code === 'Enter') && !event.repeat) {
       event.preventDefault();
@@ -2050,10 +2281,13 @@
       keysHeld.throttle = false;
     } else if (event.code === 'ArrowDown' || event.code === 'KeyS') {
       keysHeld.brake = false;
+    } else if (event.code === 'Space' || event.code === 'KeyH' || event.code === 'KeyE') {
+      stopHorn();
     }
   });
 
   window.addEventListener('blur', () => {
+    stopHorn();
     keysHeld.throttle = false;
     keysHeld.brake = false;
     pedalsHeld.gas = false;
@@ -2098,23 +2332,57 @@
     }
   }
 
+  const STATIONARY_HAZARDS = ['pothole', 'barrier', 'timber_log'];
+  const MOVING_HAZARDS = ['yellow_taxi', 'timber_truck', 'clando_van', 'rival_moto'];
+
+  function pickCollectibleType() {
+    const r = Math.random();
+    if (r < 0.64) return 'coin';
+    if (r < 0.76) return 'fuel_can';
+    if (r < 0.88) return 'shield';
+    return 'magnet';
+  }
+
   function spawnWave(spawnWorldZ) {
     waveCount += 1;
 
-    // Check existing hazards near the spawn band so all 3 lanes can never align within 20m
+    // Check existing hazards near the spawn band so all 3 lanes can never align within 22m
     const nearbyHazards = entities.filter(
       (e) =>
         ENTITY_CONFIG[e.type].kind === 'hazard' &&
-        e.worldZ >= spawnWorldZ - 20 &&
-        e.worldZ <= spawnWorldZ + 22
+        e.worldZ >= spawnWorldZ - 22 &&
+        e.worldZ <= spawnWorldZ + 24
     );
     const busyLanes = new Set(nearbyHazards.map((h) => h.lane));
+
+    // Predict whether any upstream moving vehicle could reach this band at player intersection time
+    const upstreamPredictedLanes = new Set();
+    const distToWave = Math.max(20, spawnWorldZ - playerZ);
+    const tFast = distToWave / 36;
+    const tSlow = distToWave / 16;
+    entities.forEach((e) => {
+      const cfg = ENTITY_CONFIG[e.type];
+      if (!cfg || !cfg.isVehicle || e.worldZ >= spawnWorldZ) return;
+      const vMps = cfg.speedKmh * WORLD_SPACE.KMH_TO_MPS;
+      const zMin = e.worldZ + vMps * tFast;
+      const zMax = e.worldZ + vMps * tSlow;
+      if (zMax >= spawnWorldZ - 20 && zMin <= spawnWorldZ + 22) {
+        upstreamPredictedLanes.add(e.lane);
+      }
+    });
 
     let openLane = lastOpenLane;
     const candidateOpen = [lastOpenLane];
     if (lastOpenLane > 0) candidateOpen.push(lastOpenLane - 1);
     if (lastOpenLane < 2) candidateOpen.push(lastOpenLane + 1);
-    const freeCandidates = candidateOpen.filter((lane) => !busyLanes.has(lane));
+    const preferredOpen = candidateOpen.filter(
+      (lane) => !busyLanes.has(lane) && !upstreamPredictedLanes.has(lane)
+    );
+    const freeCandidates =
+      preferredOpen.length > 0
+        ? preferredOpen
+        : candidateOpen.filter((lane) => !busyLanes.has(lane));
+
     if (freeCandidates.length > 0) {
       openLane = freeCandidates[Math.floor(Math.random() * freeCandidates.length)];
     } else {
@@ -2128,14 +2396,34 @@
     const availableBlockLanes = [0, 1, 2].filter(
       (lane) => lane !== openLane && !busyLanes.has(lane)
     );
-    const blockTwoLanes = Math.random() < Math.min(0.68, 0.38 + waveCount * 0.015);
-    const lanesToBlock =
-      blockTwoLanes || availableBlockLanes.length <= 1
+    const wantsTwo = Math.random() < Math.min(0.65, 0.36 + waveCount * 0.015);
+    let lanesToBlock =
+      wantsTwo || availableBlockLanes.length <= 1
         ? availableBlockLanes
         : [availableBlockLanes[Math.floor(Math.random() * availableBlockLanes.length)]];
 
+    // Reserve at least 1 unobstructed corridor if upstream vehicles may cross this wave band
+    const reservedCount = busyLanes.size + upstreamPredictedLanes.size;
+    if (reservedCount >= 2 && lanesToBlock.length > 1) {
+      lanesToBlock = [lanesToBlock[0]];
+    } else if (busyLanes.size + lanesToBlock.length >= 3) {
+      lanesToBlock = lanesToBlock.slice(0, Math.max(0, 2 - busyLanes.size));
+    }
+
+    let stationaryInBand = nearbyHazards.filter((h) => !ENTITY_CONFIG[h.type].isVehicle).length;
+
     lanesToBlock.forEach((lane) => {
-      const type = HAZARD_TYPES[Math.floor(Math.random() * HAZARD_TYPES.length)];
+      const allowStationary = stationaryInBand === 0 || upstreamPredictedLanes.size === 0;
+      let pool = allowStationary ? HAZARD_TYPES : MOVING_HAZARDS;
+      // Never stack 2 stationary barriers if any moving vehicle could converge on openLane
+      if (stationaryInBand >= 1 && upstreamPredictedLanes.has(openLane)) {
+        return;
+      }
+      const type = pool[Math.floor(Math.random() * pool.length)];
+      if (!ENTITY_CONFIG[type].isVehicle) {
+        stationaryInBand += 1;
+      }
+
       const sameLaneAhead = entities.some(
         (e) =>
           ENTITY_CONFIG[e.type].kind === 'hazard' &&
@@ -2159,18 +2447,32 @@
       });
     });
 
-    if (Math.random() < 0.55) {
-      const colType = COLLECTIBLE_TYPES[Math.floor(Math.random() * COLLECTIBLE_TYPES.length)];
+    if (Math.random() < 0.65) {
+      const colType = pickCollectibleType();
       const colLane = openLane;
       const colWorldZ = spawnWorldZ + 2;
-      entities.push({
-        type: colType,
-        lane: colLane,
-        worldZ: colWorldZ,
-        lockedWorldZ: colWorldZ,
-        z: worldZToNormalizedZ(colWorldZ),
-        collected: false,
-      });
+      if (colType === 'coin' && Math.random() < 0.42) {
+        for (let k = 0; k < 3; k += 1) {
+          const cz = colWorldZ + k * 7.5;
+          entities.push({
+            type: 'coin',
+            lane: colLane,
+            worldZ: cz,
+            lockedWorldZ: cz,
+            z: worldZToNormalizedZ(cz),
+            collected: false,
+          });
+        }
+      } else {
+        entities.push({
+          type: colType,
+          lane: colLane,
+          worldZ: colWorldZ,
+          lockedWorldZ: colWorldZ,
+          z: worldZToNormalizedZ(colWorldZ),
+          collected: false,
+        });
+      }
     }
   }
 
@@ -2227,9 +2529,71 @@
     if (hudHintPillEl) {
       const steerText = tiltOn ? 'Tilt Phone Smoothly' : '</> Arrows or Swipe';
       hudHintPillEl.textContent = isManual
-        ? `${steerText} • H / Horn • GAS/BRAKE • Space / Pause`
-        : `${steerText} to Steer • H / Horn • Space / Pause`;
+        ? `${steerText} • Hold SPACE Horn • GAS/BRAKE • ESC Pause`
+        : `${steerText} to Steer • Hold SPACE Horn • ESC Pause`;
     }
+  }
+
+  function syncCoinDisplays() {
+    if (homeCoinBankEl) {
+      homeCoinBankEl.textContent = savedCoinBank.toLocaleString();
+    }
+    if (garageCoinBalanceEl) {
+      garageCoinBalanceEl.textContent = `${savedCoinBank.toLocaleString()} COINS`;
+    }
+    if (hudCoinsEl) {
+      hudCoinsEl.textContent = `${savedCoinBank.toLocaleString()}`;
+    }
+  }
+
+  function renderPowerupHud() {
+    if (!hudPowerupsEl) return;
+    const activeItems = [];
+    if (fuelBoostTimer > 0) {
+      activeItems.push({
+        cls: 'nitro',
+        icon: 'icon-fuel',
+        label: 'NITRO',
+        sec: fuelBoostTimer,
+        max: POWERUPS.FUEL_DURATION,
+      });
+    }
+    if (shieldTimer > 0) {
+      activeItems.push({
+        cls: 'shield',
+        icon: 'icon-shield',
+        label: 'SHIELD',
+        sec: shieldTimer,
+        max: POWERUPS.SHIELD_DURATION,
+      });
+    }
+    if (magnetTimer > 0) {
+      activeItems.push({
+        cls: 'magnet',
+        icon: 'icon-magnet',
+        label: 'MAGNET',
+        sec: magnetTimer,
+        max: POWERUPS.MAGNET_DURATION,
+      });
+    }
+
+    if (activeItems.length === 0) {
+      hudPowerupsEl.classList.add('hidden');
+      if (hudPowerupsEl.innerHTML !== '') hudPowerupsEl.innerHTML = '';
+      return;
+    }
+
+    hudPowerupsEl.classList.remove('hidden');
+    hudPowerupsEl.innerHTML = activeItems
+      .map((item) => {
+        const pct = Math.max(0, Math.min(100, (item.sec / item.max) * 100));
+        return `<div class="powerup-pill ${item.cls}">
+          <svg class="game-svg-icon icon-sm" aria-hidden="true"><use href="#${item.icon}"></use></svg>
+          <span class="powerup-timer">${item.label} ${item.sec.toFixed(1)}s</span>
+          <div class="powerup-bar-track"><div class="powerup-bar-fill" style="width:${pct.toFixed(1)}%"></div></div>
+        </div>`;
+      })
+      .join('');
   }
 
   function syncSoundButtonsUi() {
@@ -2255,7 +2619,7 @@
     if (driveModeDesc) {
       driveModeDesc.textContent = isManual
         ? 'Manual controls active: hold GAS/BRAKE on the right while steering with Tilt or </> arrows on the left.'
-        : 'Bike accelerates automatically; steer with Tilt, </> arrows or swipe, and hold Brake to slow down.';
+        : 'Bike accelerates automatically; steer with Tilt, </> arrows or swipe, hold BRAKE to slow down, and hold SPACE for horn.';
     }
     qualityButtons.forEach((btn) => {
       btn.classList.toggle('active', btn.dataset.quality === userSettings.graphicsQuality);
@@ -2265,8 +2629,8 @@
         GRAPHICS_DESCRIPTIONS[userSettings.graphicsQuality] || GRAPHICS_DESCRIPTIONS.ultra;
     }
     if (hudQualityBadgeEl) {
-      const labels = { low: 'LOW 2D', normal: 'NORMAL', high: 'HIGH 3D', ultra: 'ULTRA HD+' };
-      hudQualityBadgeEl.textContent = labels[userSettings.graphicsQuality] || 'ULTRA HD+';
+      const labels = { low: 'LOW 2D', normal: 'NORMAL', high: 'HIGH 3D', ultra: 'ULTRA 3D' };
+      hudQualityBadgeEl.textContent = labels[userSettings.graphicsQuality] || 'ULTRA 3D';
     }
     const tiltOn = Boolean(userSettings.tiltSteering);
     if (btnHudTilt) {
@@ -2301,14 +2665,9 @@
     if (sensitivityValueEl) {
       sensitivityValueEl.textContent = `${userSettings.sensitivity.toFixed(1)}x`;
     }
-    if (inputAdsensePub && document.activeElement !== inputAdsensePub) {
-      inputAdsensePub.value = userSettings.adsensePublisherId || '';
-    }
-    if (adsenseStatusBadge) {
-      adsenseStatusBadge.textContent = userSettings.adsensePublisherId ? 'Connected' : 'Not Linked';
-    }
     syncSoundButtonsUi();
     applyDriveModeToHud();
+    syncCoinDisplays();
   }
 
   function openSettings(source = 'home') {
@@ -2316,6 +2675,9 @@
     if (source === 'hud' && currentState === GAME_STATE.PLAYING) {
       pauseGame(false);
       settingsSource = 'pause';
+    }
+    if (source === 'pause' && pauseModal) {
+      pauseModal.classList.add('hidden');
     }
     applySettingsUi();
     if (settingsModal) settingsModal.classList.remove('hidden');
@@ -2325,6 +2687,7 @@
     if (settingsModal) settingsModal.classList.add('hidden');
     if (settingsSource === 'pause' && currentState === GAME_STATE.PAUSED && pauseModal) {
       pauseModal.classList.remove('hidden');
+      setPauseMenuFocus(pauseFocusIndex);
     }
   }
 
@@ -2356,7 +2719,9 @@
 
     hudScoreEl.textContent = `${roundedMeters} m`;
     hudBestEl.textContent = `${displayBest} m`;
-    hudBonusEl.textContent = `+${bonusMetersTotal}`;
+    if (hudCoinsEl) {
+      hudCoinsEl.textContent = `${savedCoinBank.toLocaleString()}`;
+    }
     hudSpeedEl.textContent = `${roundedKmh} km/h`;
     if (hudGearBadgeEl) {
       hudGearBadgeEl.textContent = `G${gear}`;
@@ -2373,12 +2738,14 @@
     } else {
       hudComboBadgeEl.classList.add('hidden');
     }
+    renderPowerupHud();
   }
 
   function showScreen(targetState) {
     currentState = targetState;
     startScreen.classList.toggle('hidden', targetState !== GAME_STATE.START);
     if (targetState === GAME_STATE.START) {
+      syncCoinDisplays();
       triggerTitleBonkAnimation();
     }
     hudScreen.classList.toggle(
@@ -2394,6 +2761,7 @@
   function pauseGame(showModalUi = true) {
     if (currentState !== GAME_STATE.PLAYING) return;
     currentState = GAME_STATE.PAUSED;
+    stopHorn();
     sound.updateEngine(0, false);
     keysHeld.throttle = false;
     keysHeld.brake = false;
@@ -2405,18 +2773,25 @@
     if (pauseDistanceEl) pauseDistanceEl.textContent = `${Math.floor(distanceMeters)} m`;
     if (pauseBestEl) pauseBestEl.textContent = `${Math.max(bestMeters, Math.floor(distanceMeters))} m`;
     if (pauseComboEl) pauseComboEl.textContent = `x${Math.max(1, comboMultiplier || 1)}`;
-    if (pauseModal) pauseModal.classList.toggle('hidden', !showModalUi);
+    if (pauseModal) {
+      pauseModal.classList.toggle('hidden', !showModalUi);
+      if (showModalUi) {
+        setPauseMenuFocus(0);
+      }
+    }
   }
 
   function resumeGame() {
     if (currentState !== GAME_STATE.PAUSED) return;
     if (pauseModal) pauseModal.classList.add('hidden');
+    getPauseMenuButtons().forEach((b) => b.classList.remove('kb-focus'));
     lastTimestamp = 0;
     showScreen(GAME_STATE.PLAYING);
     updateHudDisplay();
   }
 
   function returnToHomeScreen() {
+    stopHorn();
     sound.updateEngine(0, false);
     keysHeld.throttle = false;
     keysHeld.brake = false;
@@ -2424,6 +2799,9 @@
     pedalsHeld.brake = false;
     if (pedalBrakeEl) pedalBrakeEl.classList.remove('pressed');
     if (pedalGasEl) pedalGasEl.classList.remove('pressed');
+    fuelBoostTimer = 0;
+    shieldTimer = 0;
+    magnetTimer = 0;
     celebrationTimer = 0;
     celebrationParticles = [];
     crashFlash = 0;
@@ -2438,9 +2816,11 @@
     targetBestLineMeters = bestMeters;
     closeSettings();
     closeAbout();
+    if (garageModal) garageModal.classList.add('hidden');
     closeLeaderboard();
     closeAccountModal();
     updateHomeAccountUi();
+    syncCoinDisplays();
     showScreen(GAME_STATE.START);
   }
 
@@ -2474,6 +2854,11 @@
     playerZ = 0;
     distanceMeters = 0;
     bonusMetersTotal = 0;
+    runCoins = 0;
+    fuelBoostTimer = 0;
+    shieldTimer = 0;
+    magnetTimer = 0;
+    stopHorn();
     speedKmh =
       userSettings.driveMode === 'manual'
         ? SPEED_CURVE.MANUAL_LAUNCH_KMH
@@ -2545,6 +2930,7 @@
 
     applyDriveModeToHud();
     leaderboardModal.classList.add('hidden');
+    if (garageModal) garageModal.classList.add('hidden');
     closeAccountModal();
     closeSettings();
     closeAbout();
@@ -2602,7 +2988,6 @@
   }
 
   function updateHomeAccountUi() {
-    if (!homeAccountBar) return;
     const isRegistered = playerProfile && playerProfile.accountType === 'registered';
     const isConfigured = Boolean(playerProfile && playerProfile.configured);
     if (homeAccountBadge) {
@@ -2894,6 +3279,11 @@
       sound.playCrash();
     }
 
+    stopHorn();
+    fuelBoostTimer = 0;
+    shieldTimer = 0;
+    magnetTimer = 0;
+    renderPowerupHud();
     sound.updateEngine(0, false);
     keysHeld.throttle = false;
     keysHeld.brake = false;
@@ -3415,6 +3805,22 @@
   if (btnOpenAbout) {
     btnOpenAbout.addEventListener('click', () => openAbout('about'));
   }
+  if (btnOpenGarage && garageModal) {
+    btnOpenGarage.addEventListener('click', () => {
+      syncCoinDisplays();
+      garageModal.classList.remove('hidden');
+    });
+  }
+  if (btnCloseGarage && garageModal) {
+    btnCloseGarage.addEventListener('click', () => {
+      garageModal.classList.add('hidden');
+    });
+  }
+  if (garageModal) {
+    garageModal.addEventListener('click', (event) => {
+      if (event.target === garageModal) garageModal.classList.add('hidden');
+    });
+  }
   btnGameoverLeaderboard.addEventListener('click', openLeaderboard);
   btnCloseLeaderboard.addEventListener('click', closeLeaderboard);
   if (btnCloseSettings) btnCloseSettings.addEventListener('click', closeSettings);
@@ -3431,15 +3837,6 @@
       applySettingsUi();
     });
   });
-
-  if (inputAdsensePub) {
-    inputAdsensePub.addEventListener('change', () => {
-      userSettings.adsensePublisherId = normalizeAdsenseId(inputAdsensePub.value);
-      saveSettings(userSettings);
-      applySettingsUi();
-      initAdSense(userSettings.adsensePublisherId);
-    });
-  }
 
   if (btnModeAuto) {
     btnModeAuto.addEventListener('click', () => {
@@ -3642,6 +4039,14 @@
   // =========================================================
   // 10. Near-Miss Combo & Shrunk-AABB Collision Detection
   // =========================================================
+  function addCoins(amount) {
+    if (!amount || amount <= 0) return;
+    runCoins += amount;
+    savedCoinBank += amount;
+    saveCoinBank(savedCoinBank);
+    syncCoinDisplays();
+  }
+
   function triggerNearMiss(entity, cfg) {
     entity.nearMissAwarded = true;
     closeCallCount += 1;
@@ -3653,12 +4058,13 @@
     const bonus = COMBO.BASE_BONUS_METERS * comboMultiplier;
     distanceMeters += bonus;
     bonusMetersTotal += bonus;
+    addCoins(1);
 
     const bikeX = getHandlebarBaseX();
     const label =
       comboMultiplier >= 2
-        ? `SHARP DODGE! x${comboMultiplier} (+${bonus}m)`
-        : `CLOSE CALL! +${bonus}m`;
+        ? `SHARP DODGE! +1 COIN • x${comboMultiplier}`
+        : `SHARP DODGE! +1 COIN`;
 
     addPopup(label, bikeX, getBottomY() - 155, '#fde047');
     sound.playNearMiss(Math.min(8, comboMultiplier), cfg.isVehicle);
@@ -3673,22 +4079,38 @@
       const cfg = ENTITY_CONFIG[entity.type];
 
       if (cfg.kind === 'collectible') {
+        const pickupLane = typeof entity.visualLane === 'number' ? entity.visualLane : entity.lane;
+        const collectBand = magnetTimer > 0 && entity.type === 'coin' ? 0.72 : 0.45;
         if (
           !entity.collected &&
           entity.z >= COLLISION.COLLECT_MIN_Z &&
           entity.z <= COLLISION.COLLECT_MAX_Z &&
-          Math.abs(currentLane - entity.lane) < 0.45
+          Math.abs(currentLane - pickupLane) < collectBand
         ) {
           entity.collected = true;
           collectibleCount += 1;
-          distanceMeters += cfg.bonusMeters;
-          bonusMetersTotal += cfg.bonusMeters;
-          const proj = projectPoint(entity.lane, entity.z);
-          addPopup(cfg.label, proj.x, proj.y - 36, cfg.color);
+          const proj = projectPoint(pickupLane, entity.z);
+
+          if (entity.type === 'coin') {
+            addCoins(cfg.coins || 10);
+            addPopup('+10 COINS!', proj.x, proj.y - 36, cfg.color);
+          } else if (entity.type === 'fuel_can') {
+            fuelBoostTimer = POWERUPS.FUEL_DURATION;
+            speedKmh = Math.min(SPEED_CURVE.MAX_KMH, Math.max(speedKmh + 28, 125));
+            addPopup('NITRO FUEL BOOST!', proj.x, proj.y - 36, cfg.color);
+          } else if (entity.type === 'shield') {
+            shieldTimer = POWERUPS.SHIELD_DURATION;
+            addPopup('IMMUNITY SHIELD!', proj.x, proj.y - 36, cfg.color);
+          } else if (entity.type === 'magnet') {
+            magnetTimer = POWERUPS.MAGNET_DURATION;
+            addPopup('COIN MAGNET!', proj.x, proj.y - 36, cfg.color);
+          }
           sound.playCollect();
         }
         continue;
       }
+
+      if (entity.shieldIgnored) continue;
 
       const entityLane = typeof entity.visualLane === 'number' ? entity.visualLane : entity.lane;
       const laneDiff = Math.abs(currentLane - entityLane);
@@ -3721,22 +4143,27 @@
         }
       }
 
-      // Hazard Crash Danger Zone: z >= 0.88 && z <= 1.0
+      // Hazard Crash Danger Zone: z >= 0.87 && z <= 0.97
       if (entity.z < COLLISION.DANGER_MIN_Z || entity.z > COLLISION.DANGER_MAX_Z) {
         continue;
       }
 
-      const proj = projectPoint(entity.lane, entity.z);
+      const proj = projectPoint(entityLane, entity.z);
       const obsHalfW = cfg.width * proj.scale * 0.5 * COLLISION.AABB_SHRINK;
       const horizontalOverlap = Math.abs(bikeX - proj.x) < bikeHalfW + obsHalfW;
 
-      // Pothole edge-graze rattle (breaks combo without ending run)
+      // Pothole edge-graze rattle (breaks combo unless shielded)
       if (
         entity.type === 'pothole' &&
         !entity.rattled &&
         laneDiff >= cfg.laneHalfSpan &&
         laneDiff < cfg.rattleSpan
       ) {
+        if (shieldTimer > 0) {
+          entity.rattled = true;
+          entity.shieldIgnored = true;
+          continue;
+        }
         entity.rattled = true;
         rattleTimer = 0.25;
         comboChain = 0;
@@ -3748,6 +4175,19 @@
       }
 
       if (horizontalOverlap && laneDiff < cfg.laneHalfSpan) {
+        if (shieldTimer > 0) {
+          entity.shieldIgnored = true;
+          if (cfg.isVehicle) {
+            entity.worldZ = playerZ + 11;
+            entity.z = worldZToNormalizedZ(entity.worldZ);
+          } else {
+            entity.collected = true;
+          }
+          crashShakeTimer = 0.12;
+          sound.playBump();
+          addPopup('SHIELD SMASH!', bikeX, getBottomY() - 145, '#38bdf8');
+          continue;
+        }
         if (cfg.isVehicle && speedKmh <= COLLISION.VEHICLE_BUMP_MAX_KMH) {
           if ((entity.bumpCooldown || 0) <= 0) {
             entity.bumpCooldown = 0.65;
@@ -3777,32 +4217,43 @@
   function updateSpeedCurve(dt) {
     const braking = isBrakingActive();
     const throttling = isThrottlingActive();
+    const nitroActive = fuelBoostTimer > 0;
+    const nitroExtra = nitroActive ? SPEED_CURVE.NITRO_BONUS_KMH : 0;
 
     if (braking) {
       const floorKmh = userSettings.driveMode === 'manual' ? 0 : 14;
-      speedKmh = Math.max(floorKmh, speedKmh - 84 * dt);
+      speedKmh = Math.max(floorKmh, speedKmh - 88 * dt);
       suspensionPitch += (9 - suspensionPitch) * Math.min(1, 14 * dt);
       return;
     }
 
-    if (throttling) {
-      const accelBoost = speedKmh < 80 ? 44 : speedKmh < 130 ? 32 : 20;
-      speedKmh = Math.min(SPEED_CURVE.MAX_KMH, speedKmh + accelBoost * dt);
-      suspensionPitch += (-5 - suspensionPitch) * Math.min(1, 12 * dt);
+    // As time and distance climb, top/cruise speeds rise smoothly
+    const timeRamp = Math.min(54, runDurationSeconds * 0.78 + distanceMeters * 0.008);
+
+    if (throttling || nitroActive) {
+      const baseTop = userSettings.driveMode === 'manual'
+        ? Math.min(182, 152 + runDurationSeconds * 0.48)
+        : Math.min(SPEED_CURVE.AUTO_TOP_KMH, 138 + runDurationSeconds * 0.45);
+      const targetMax = Math.min(SPEED_CURVE.MAX_KMH, baseTop + nitroExtra);
+      const accelBoost = nitroActive
+        ? 68
+        : speedKmh < 80
+        ? 46
+        : speedKmh < 130
+        ? 34
+        : 22;
+      speedKmh = Math.min(targetMax, speedKmh + accelBoost * dt);
+      suspensionPitch += ((nitroActive ? -7 : -5) - suspensionPitch) * Math.min(1, 12 * dt);
       return;
     }
 
     if (userSettings.driveMode === 'auto') {
-      if (distanceMeters < 300) {
-        speedKmh = Math.min(82, speedKmh + 3.4 * dt);
-      } else if (distanceMeters < 1200) {
-        speedKmh = Math.min(138, speedKmh + 4.8 * dt);
-      } else {
-        speedKmh = Math.min(SPEED_CURVE.AUTO_TOP_KMH, speedKmh + 3.2 * dt);
-      }
+      const progressiveTarget = Math.min(SPEED_CURVE.AUTO_TOP_KMH, 76 + timeRamp);
+      const accelRate = speedKmh < 75 ? 16 : 5.4;
+      speedKmh = Math.min(progressiveTarget, speedKmh + accelRate * dt);
       suspensionPitch += (0 - suspensionPitch) * Math.min(1, 8 * dt);
     } else {
-      // Manual coasting gently settles toward cruising crawl when pedals are released
+      // Manual coasting settles smoothly toward a gentle rolling idle unless throttle/brake held
       if (speedKmh > 18) {
         speedKmh = Math.max(18, speedKmh - 18 * dt);
       }
@@ -3896,6 +4347,16 @@
 
     // PLAYING state progression & anti-cheat run telemetry
     runDurationSeconds += dt;
+    if (fuelBoostTimer > 0) fuelBoostTimer = Math.max(0, fuelBoostTimer - dt);
+    if (shieldTimer > 0) shieldTimer = Math.max(0, shieldTimer - dt);
+    if (magnetTimer > 0) magnetTimer = Math.max(0, magnetTimer - dt);
+    if (hornHeld) {
+      hornYieldTimer -= dt;
+      if (hornYieldTimer <= 0) {
+        hornYieldTimer = 0.24;
+        clearTrafficAheadWithHorn(false);
+      }
+    }
     if (manualSteerOverrideTimer > 0) {
       manualSteerOverrideTimer = Math.max(0, manualSteerOverrideTimer - dt);
     }
@@ -3952,13 +4413,31 @@
     worldRollAngle = -leanNormalized * STEERING.MAX_WORLD_ROLL_RAD;
 
     // Stationary hazards stay 100% locked to their asphalt meter coordinates;
-    // Moving vehicles adjust speed smoothly without ever skipping or teleporting.
+    // Moving vehicles maintain constant world speeds and never form 3-lane walls.
     for (let i = entities.length - 1; i >= 0; i -= 1) {
       const entity = entities[i];
       if (entity.bumpCooldown > 0) {
         entity.bumpCooldown = Math.max(0, entity.bumpCooldown - dt);
       }
       const cfg = ENTITY_CONFIG[entity.type];
+
+      // Coin Magnet pulls road coins smoothly toward the bike across lanes
+      if (
+        entity.type === 'coin' &&
+        !entity.collected &&
+        magnetTimer > 0 &&
+        entity.worldZ > playerZ - 3 &&
+        entity.worldZ < playerZ + 40
+      ) {
+        if (typeof entity.visualLane !== 'number') {
+          entity.visualLane = entity.lane;
+        }
+        entity.visualLane += (currentLane - entity.visualLane) * Math.min(1, 11 * dt);
+        if (entity.worldZ > playerZ + 2) {
+          entity.worldZ -= 16 * dt;
+        }
+      }
+
       if (cfg.speedKmh > 0) {
         if (typeof entity.visualLane !== 'number') {
           entity.visualLane = entity.lane;
@@ -3982,11 +4461,9 @@
           entity.visualLane = entity.lane;
           entity.yielding = false;
         }
-        const stepMeters = cfg.speedKmh * WORLD_SPACE.KMH_TO_MPS * dt;
-        const candidateWorldZ = entity.worldZ + stepMeters;
-        let mustYield = false;
-        let occupiedOtherLanes = 0;
 
+        let effectiveKmh = cfg.speedKmh;
+        let sameLaneBlocker = null;
         for (let j = 0; j < entities.length; j += 1) {
           if (j === i) continue;
           const other = entities[j];
@@ -3994,30 +4471,36 @@
           if (
             other.lane === entity.lane &&
             other.worldZ > entity.worldZ &&
-            other.worldZ - candidateWorldZ < 20
+            other.worldZ - entity.worldZ < 24
           ) {
-            mustYield = true;
+            sameLaneBlocker = other;
             break;
           }
-          if (
-            other.lane !== entity.lane &&
-            Math.abs(other.worldZ - candidateWorldZ) < 18
-          ) {
-            occupiedOtherLanes += 1;
+        }
+
+        if (sameLaneBlocker) {
+          const merged = tryYieldVehicleLane(entity);
+          const blockerCfg = ENTITY_CONFIG[sameLaneBlocker.type];
+          if (!merged && blockerCfg.isVehicle && sameLaneBlocker.worldZ - entity.worldZ < 15) {
+            effectiveKmh = Math.max(46, Math.min(cfg.speedKmh, blockerCfg.speedKmh));
           }
         }
 
-        if (!mustYield && occupiedOtherLanes >= 2) {
-          mustYield = true;
+        const candidateWorldZ = entity.worldZ + effectiveKmh * WORLD_SPACE.KMH_TO_MPS * dt;
+        const otherLanesOccupied = getOccupiedOtherLanesSet(entity.lane, candidateWorldZ, entity, 15);
+        // Prevent any moving vehicle from sitting alongside 2 other blocked lanes to seal the road
+        if (otherLanesOccupied.size >= 2) {
+          if (!tryYieldVehicleLane(entity) && entity.worldZ > playerZ + 18) {
+            effectiveKmh = Math.max(effectiveKmh, cfg.speedKmh + 24);
+          }
         }
 
-        entity.braking = mustYield;
-        const effectiveStep = mustYield ? stepMeters * 0.25 : stepMeters;
-        entity.worldZ += effectiveStep;
+        entity.braking = false;
+        const stepMeters = effectiveKmh * WORLD_SPACE.KMH_TO_MPS * dt;
+        entity.worldZ += stepMeters;
         entity.wheelPhase =
-          ((entity.wheelPhase || 0) + dt * (cfg.speedKmh * (mustYield ? 0.08 : 0.25))) %
-          (Math.PI * 2);
-      } else if (typeof entity.lockedWorldZ === 'number') {
+          ((entity.wheelPhase || 0) + dt * (effectiveKmh * 0.25)) % (Math.PI * 2);
+      } else if (entity.type !== 'coin' && typeof entity.lockedWorldZ === 'number') {
         entity.worldZ = entity.lockedWorldZ;
         entity.braking = false;
       }
@@ -5457,54 +5940,98 @@
 
       case 'fuel_can': {
         const bob = Math.sin(engineVibPhase * 0.22 + entity.worldZ * 0.4) * 4;
+        const pulse = 1 + Math.sin(engineVibPhase * 0.35 + entity.worldZ * 0.2) * 0.08;
         ctx.translate(0, bob - 18);
-        ctx.fillStyle = 'rgba(239, 68, 68, 0.25)';
+        ctx.scale(pulse, pulse);
+        ctx.fillStyle = 'rgba(249, 115, 22, 0.28)';
         ctx.beginPath();
-        ctx.arc(0, 0, 24, 0, Math.PI * 2);
+        ctx.arc(0, 0, 26, 0, Math.PI * 2);
         ctx.fill();
-        ctx.fillStyle = '#dc2626';
-        drawRoundedRect(-14, -18, 28, 34, 5);
+        ctx.fillStyle = '#ea580c';
+        drawRoundedRect(-14, -18, 28, 34, 6);
         ctx.fill();
-        ctx.fillStyle = '#facc15';
+        ctx.fillStyle = '#9a3412';
+        ctx.fillRect(-10, -14, 20, 6);
+        ctx.fillStyle = '#fde047';
         ctx.fillRect(-4, -24, 8, 6);
-        ctx.strokeStyle = '#ffffff';
-        ctx.lineWidth = 2.5;
+        // Custom vector flame crest (no sticker/emoji)
+        ctx.fillStyle = '#fef08a';
         ctx.beginPath();
-        ctx.moveTo(-8, -8);
-        ctx.lineTo(8, 8);
-        ctx.moveTo(8, -8);
-        ctx.lineTo(-8, 8);
-        ctx.stroke();
+        ctx.moveTo(0, -8);
+        ctx.quadraticCurveTo(9, 1, 0, 11);
+        ctx.quadraticCurveTo(-9, 1, 0, -8);
+        ctx.fill();
         break;
       }
 
-      case 'plantain': {
+      case 'shield': {
         const bob = Math.sin(engineVibPhase * 0.22 + entity.worldZ * 0.4) * 4;
+        const pulse = 1 + Math.sin(engineVibPhase * 0.28) * 0.08;
         ctx.translate(0, bob - 18);
-        ctx.fillStyle = 'rgba(132, 204, 22, 0.25)';
+        ctx.fillStyle = 'rgba(56, 189, 248, 0.26)';
         ctx.beginPath();
-        ctx.arc(0, 0, 24, 0, Math.PI * 2);
+        ctx.arc(0, 0, 26 * pulse, 0, Math.PI * 2);
         ctx.fill();
-        ctx.strokeStyle = '#eab308';
-        ctx.lineWidth = 7;
-        ctx.lineCap = 'round';
-        [-8, 0, 8].forEach((offsetX) => {
-          ctx.beginPath();
-          ctx.arc(offsetX, 0, 14, -0.9, 1.4);
-          ctx.stroke();
-        });
-        ctx.fillStyle = '#65a30d';
-        ctx.fillRect(-3, -17, 6, 7);
+        // Custom sculpted shield coat-of-arms
+        ctx.fillStyle = '#0284c7';
+        ctx.beginPath();
+        ctx.moveTo(0, -18);
+        ctx.lineTo(15, -12);
+        ctx.lineTo(13, 4);
+        ctx.quadraticCurveTo(0, 19, 0, 19);
+        ctx.quadraticCurveTo(0, 19, -13, 4);
+        ctx.lineTo(-15, -12);
+        ctx.closePath();
+        ctx.fill();
+        ctx.strokeStyle = '#bae6fd';
+        ctx.lineWidth = 2.6;
+        ctx.stroke();
+        ctx.fillStyle = '#e0f2fe';
+        ctx.fillRect(-2.5, -9, 5, 16);
+        ctx.fillRect(-8, -3.5, 16, 5);
+        break;
+      }
+
+      case 'magnet': {
+        const bob = Math.sin(engineVibPhase * 0.24 + entity.worldZ * 0.35) * 4;
+        const spin = Math.sin(engineVibPhase * 0.12 + entity.worldZ * 0.15) * 0.25;
+        ctx.translate(0, bob - 18);
+        ctx.rotate(spin);
+        ctx.fillStyle = 'rgba(251, 113, 133, 0.24)';
+        ctx.beginPath();
+        ctx.arc(0, 0, 26, 0, Math.PI * 2);
+        ctx.fill();
+        // Custom U-shaped horseshoe magnet with chrome poles
+        ctx.strokeStyle = '#e11d48';
+        ctx.lineWidth = 7.5;
+        ctx.lineCap = 'butt';
+        ctx.beginPath();
+        ctx.arc(0, -3, 12, 0, Math.PI, false);
+        ctx.stroke();
+        ctx.fillStyle = '#e11d48';
+        ctx.fillRect(-15.5, -15, 7, 13);
+        ctx.fillRect(8.5, -15, 7, 13);
+        ctx.fillStyle = '#e2e8f0';
+        ctx.fillRect(-15.5, -18, 7, 5);
+        ctx.fillRect(8.5, -18, 7, 5);
+        // Animated magnetic waves
+        ctx.strokeStyle = '#fde047';
+        ctx.lineWidth = 1.6;
+        ctx.beginPath();
+        ctx.arc(0, -18, 6 + (Math.sin(engineVibPhase * 0.35) + 1) * 2.5, Math.PI * 1.15, Math.PI * 1.85);
+        ctx.stroke();
         break;
       }
 
       case 'coin': {
         const bob = Math.sin(engineVibPhase * 0.25 + entity.worldZ * 0.4) * 4;
+        const spinWidth = Math.max(0.28, Math.abs(Math.cos(engineVibPhase * 0.18 + entity.worldZ * 0.3)));
         ctx.translate(0, bob - 18);
-        ctx.fillStyle = 'rgba(250, 204, 21, 0.3)';
+        ctx.fillStyle = 'rgba(250, 204, 21, 0.28)';
         ctx.beginPath();
-        ctx.arc(0, 0, 21, 0, Math.PI * 2);
+        ctx.arc(0, 0, 22, 0, Math.PI * 2);
         ctx.fill();
+        ctx.scale(spinWidth, 1);
         ctx.fillStyle = '#facc15';
         ctx.beginPath();
         ctx.arc(0, 0, 14, 0, Math.PI * 2);
@@ -5895,6 +6422,34 @@
     });
 
     drawInstrumentCluster(kmh, braking);
+
+    // Timed Power-Up cockpit effects for 2D/Normal/High modes
+    if (shieldTimer > 0) {
+      const pulse = 0.22 + Math.sin(engineVibPhase * 0.28) * 0.08;
+      ctx.strokeStyle = `rgba(56, 189, 248, ${pulse * 2.2})`;
+      ctx.fillStyle = `rgba(14, 165, 233, ${pulse * 0.45})`;
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.arc(0, -32, 165, Math.PI * 1.05, Math.PI * 1.95);
+      ctx.stroke();
+      ctx.fill();
+    }
+    if (magnetTimer > 0) {
+      ctx.strokeStyle = 'rgba(251, 113, 133, 0.65)';
+      ctx.lineWidth = 2.5;
+      const rad = 42 + ((engineVibPhase * 2.2) % 24);
+      ctx.beginPath();
+      ctx.arc(0, -34, rad, 0, Math.PI * 2);
+      ctx.stroke();
+    }
+    if (fuelBoostTimer > 0) {
+      [-1, 1].forEach((side) => {
+        ctx.fillStyle = 'rgba(249, 115, 22, 0.55)';
+        ctx.beginPath();
+        ctx.ellipse(side * 135, -35, 18, 70, side * 0.2, 0, Math.PI * 2);
+        ctx.fill();
+      });
+    }
     ctx.restore();
   }
 
@@ -5927,6 +6482,53 @@
   }
 
   function render() {
+    if (ultra3DEnabled && window.BendskinUltra3D) {
+      ctx.clearRect(0, 0, LOGICAL_WIDTH, logicalHeight);
+      window.BendskinUltra3D.renderFrame({
+        cameraZ: getActiveCameraZ(),
+        currentLane,
+        handlebarAngle,
+        worldRollAngle,
+        suspensionPitch,
+        speedKmh,
+        braking: isBrakingActive(),
+        distanceMeters,
+        rattleTimer,
+        celebrationTimer,
+        engineVibPhase,
+        roadsideProps,
+        entities,
+        targetBestLineMeters,
+        rivalActive: rivalChallenge.active,
+        rivalDefeated: rivalChallenge.defeatedThisRun,
+        rivalMeters: rivalChallenge.targetMeters,
+        powerups: {
+          fuelBoost: fuelBoostTimer,
+          shield: shieldTimer,
+          magnet: magnetTimer,
+        },
+        crashShakeTimer,
+        isRunning: currentState === GAME_STATE.PLAYING || currentState === GAME_STATE.PAUSED,
+      });
+
+      const shakeAmp = crashShakeTimer > 0 ? (crashShakeTimer / 0.25) * 8 : 0;
+      const shakeX = shakeAmp > 0 ? Math.sin(crashShakeTimer * 180) * shakeAmp : 0;
+      const shakeY = shakeAmp > 0 ? Math.cos(crashShakeTimer * 210) * shakeAmp : 0;
+
+      ctx.save();
+      ctx.translate(shakeX, shakeY);
+      drawWindStreaks();
+      drawCelebrationParticles();
+      drawFloatingPopups();
+      ctx.restore();
+
+      if (crashFlash > 0) {
+        ctx.fillStyle = `rgba(220, 38, 38, ${crashFlash * 0.45})`;
+        ctx.fillRect(0, 0, LOGICAL_WIDTH, logicalHeight);
+      }
+      return;
+    }
+
     ctx.fillStyle = '#0b162c';
     ctx.fillRect(0, 0, LOGICAL_WIDTH, logicalHeight);
 
@@ -5993,9 +6595,10 @@
   resizeCanvas();
   initAmbientWorld(0);
   applySettingsUi();
-  initAdSense(userSettings.adsensePublisherId);
+  initAdSense(ADSENSE_BACKGROUND_PUB_ID);
   parseRivalChallengeFromUrl();
   updateHomeAccountUi();
+  syncCoinDisplays();
   showScreen(GAME_STATE.START);
   updateHudDisplay();
   leaderboardService.syncFromFirestore();
