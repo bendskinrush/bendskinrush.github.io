@@ -10,7 +10,7 @@
   <link rel="icon" type="image/svg+xml" href="/assets/logo.svg">
   <link rel="shortcut icon" href="/assets/logo.svg">
   <link rel="apple-touch-icon" href="/assets/logo.svg">
-  <meta name="description" content="Weave through city traffic, control throttle and brakes in first-person, dodge potholes, and defend your location on the live leaderboard.">
+  <meta name="description" content="Weave through city traffic, control throttle and brakes in first-person 1080p 3D, and defend your location on the live leaderboard.">
   <meta property="og:type" content="website">
   <meta property="og:title" content="Bendskin Rush — High-Speed Street Moto Racing">
   <meta property="og:description" content="Weave through city traffic, control throttle and brakes in first-person, and climb the live city leaderboard.">
@@ -195,9 +195,10 @@
   </svg>
 
   <main id="app-container" aria-label="Bendskin Rush Game Viewport">
-    <!-- Layer 0: Real WebGL 3D Engine Canvas (Ultra HD) + HTML5 2.5D/Overlay Canvas -->
+    <!-- Layer 0: Real WebGL 3D Engine Canvas (1080p+ Ultra HD) + HTML5 2.5D/Overlay Canvas + Crash Shatter Canvas -->
     <canvas id="game-canvas-3d" class="hidden"></canvas>
     <canvas id="game-canvas"></canvas>
+    <canvas id="crash-shatter-canvas" class="hidden" aria-hidden="true"></canvas>
 
     <!-- Layer 1: Minimalist HTML/CSS UI Overlay Screens -->
     <div id="ui-layer">
@@ -238,7 +239,7 @@
             <div class="hud-badges">
               <span id="hud-speed" class="hud-mini-badge speed-badge">60 km/h</span>
               <span id="hud-gear-badge" class="hud-mini-badge gear-badge">G1</span>
-              <span id="hud-quality-badge" class="hud-mini-badge quality-badge">ULTRA 3D</span>
+              <span id="hud-quality-badge" class="hud-mini-badge quality-badge">ULTRA 1080p</span>
               <span id="hud-fps" class="hud-mini-badge fps-badge">60 FPS</span>
               <button id="btn-hud-tilt" class="hud-mini-badge tilt-badge" type="button" title="Toggle or Recenter Phone Tilt Steering">
                 <svg class="game-svg-icon icon-sm"><use href="#icon-tilt"></use></svg>
@@ -736,24 +737,24 @@
             <div class="settings-group">
               <div class="settings-label-row">
                 <span class="settings-label">Graphics Quality</span>
-                <span class="settings-badge">720p+ 3D Engine</span>
+                <span class="settings-badge">1080p PBR 3D</span>
               </div>
               <div class="quality-grid" role="group" aria-label="Graphics Quality">
                 <button id="btn-quality-low" class="seg-btn" type="button" data-quality="low">
                   Low
                 </button>
                 <button id="btn-quality-normal" class="seg-btn" type="button" data-quality="normal">
-                  Normal
+                  Medium
                 </button>
                 <button id="btn-quality-high" class="seg-btn" type="button" data-quality="high">
-                  High HD
+                  High 720p+
                 </button>
                 <button id="btn-quality-ultra" class="seg-btn active" type="button" data-quality="ultra">
-                  Ultra HD 720p+
+                  Ultra HD 1080p
                 </button>
               </div>
               <p id="graphics-quality-desc" class="settings-hint">
-                Ultra HD 720p+ active: crisp 720p+ 3D engine with visible rider fingers &amp; gloves, twin-pod digital/analog dashboard, turn signals &amp; city blocks.
+                Ultra HD 1080p active: full 1080p supersampled render scale, MSAA anti-aliasing, max anisotropic PBR textures, sky reflections &amp; sculpted realistic cars, buildings &amp; trees.
               </p>
             </div>
 
@@ -949,7 +950,7 @@
             <article id="panel-about" class="about-panel" data-about-panel="about">
               <h3>Welcome to Bendskin Rush</h3>
               <p>
-                <strong>Bendskin Rush</strong> is a 720p+ first-person urban motorcycle racing game built for instant play in mobile and desktop browsers. Weave smoothly between yellow taxis, clando vans, timber trucks, rival riders, and road barriers while chasing your personal best and city leaderboard rank.
+                <strong>Bendskin Rush</strong> is a 1080p first-person urban motorcycle racing game built for instant play in mobile and desktop browsers. Weave smoothly between sculpted yellow taxis, clando vans, timber trucks, rival riders, and road barriers while chasing your personal best and city leaderboard rank.
               </p>
               <h4>How to Ride, Signals, Handedness &amp; Controls</h4>
               <ul>
@@ -957,7 +958,7 @@
                 <li><strong>Mobile Car Pedals &amp; Left/Right-Handed Swap:</strong> Use <code>&lt; / &gt;</code> steering arrows or swipe (switch <em>Left-Handed / Right-Handed</em> in Settings to swap steering arrows and the car-style <strong>GAS / BRAKE</strong> foot pedals between Left and Right).</li>
                 <li><strong>Vehicle Turn Signals:</strong> Watch every car, van, truck, and rival bike flash its amber turn-signal indicator before changing lanes so you can react cleanly at high speed.</li>
                 <li><strong>Per-Account Coins &amp; Full-Bike Garage:</strong> Collect spinning Gold Coins (<code>+10</code>) and Sharp Dodges (<code>+1</code>) stored privately per account. Open <strong>Garage</strong> to inspect every motorcycle in full rotatable 3D!</li>
-                <li><strong>720p+ Graphics Ladder:</strong> Choose <em>Low</em>, <em>Normal</em>, <em>High HD</em> (3D WebGL), or <em>Ultra HD 720p+</em> (visible rider fingers, detailed digital/analog dashboard &amp; crisp 720p+ rendering) in Settings.</li>
+                <li><strong>1080p Graphics Ladder:</strong> Choose <em>Low</em> (2.5D extruded), <em>Medium</em> (3D WebGL), <em>High 720p+</em> (supersampled 720p+ 3D cockpit), or <em>Ultra HD 1080p</em> (1080p supersampling, anti-aliasing, max anisotropic PBR textures, sky reflections &amp; realistic non-boxy cars, buildings &amp; trees) in Settings.</li>
               </ul>
             </article>
 

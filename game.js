@@ -67,10 +67,10 @@
   const GRAPHICS_QUALITIES = ['low', 'normal', 'high', 'ultra'];
 
   const GRAPHICS_DESCRIPTIONS = {
-    low: 'Low quality active: classic 2.5D shaded vehicles and smooth road lighting with balanced battery use.',
-    normal: 'Normal quality active: perspective-extruded 3D vehicles, raised curbs & buildings, headbeams & mirrors.',
-    high: 'High HD 3D Engine: real-time Three.js WebGL 3D highway, detailed traffic, shadows & full armored gloves.',
-    ultra: 'Ultra HD 720p+ Engine: crisp 720p+ supersampled 3D cockpit, visible rider fingers & twin digital/analog dashboard.',
+    low: 'Low quality active: perspective-extruded 2.5D vehicles, raised curbs & buildings, headbeams & mirrors.',
+    normal: 'Medium quality active: real-time Three.js WebGL 3D highway, traffic lights, shadows & armored gloves.',
+    high: 'High 720p+ Engine: crisp 720p+ supersampled 3D cockpit, visible rider fingers & twin digital/analog dashboard.',
+    ultra: 'Ultra HD 1080p active: full 1080p supersampled render scale, MSAA anti-aliasing, 16x anisotropic PBR textures, sky reflections & sculpted vehicles, buildings & trees.',
   };
 
   // Uniform metadata table: stationary hazards stay at speedKmh: 0 (world-locked),
@@ -268,6 +268,8 @@
   const canvas3d = document.getElementById('game-canvas-3d');
   const canvas = document.getElementById('game-canvas');
   const ctx = canvas.getContext('2d', { alpha: true });
+  const crashShatterCanvas = document.getElementById('crash-shatter-canvas');
+  const shatterCtx = crashShatterCanvas ? crashShatterCanvas.getContext('2d', { alpha: true }) : null;
 
   const hudScreen = document.getElementById('hud-screen');
   const startScreen = document.getElementById('start-screen');
@@ -688,6 +690,27 @@
         gain.connect(ctxAudio.destination);
         src.start(now);
         src.stop(now + 0.28);
+
+        // High-frequency windshield glass shatter burst + crystalline splinter pings
+        const glassSrc = ctxAudio.createBufferSource();
+        glassSrc.buffer = noiseBuffer;
+        const glassFilter = ctxAudio.createBiquadFilter();
+        glassFilter.type = 'bandpass';
+        glassFilter.frequency.setValueAtTime(3600, now);
+        glassFilter.Q.setValueAtTime(1.1, now);
+        const glassGain = ctxAudio.createGain();
+        glassGain.gain.setValueAtTime(0.24, now + 0.01);
+        glassGain.gain.exponentialRampToValueAtTime(0.0001, now + 0.22);
+        glassSrc.connect(glassFilter);
+        glassFilter.connect(glassGain);
+        glassGain.connect(ctxAudio.destination);
+        glassSrc.start(now + 0.01);
+        glassSrc.stop(now + 0.24);
+
+        const crystalFreqs = [2250, 3180, 4120, 2690, 3740];
+        crystalFreqs.forEach((freq, idx) => {
+          playTone(freq, freq * 0.72, 0.075, 'triangle', 0.055, 0.015 + idx * 0.032);
+        });
       } catch {
         // No-op
       }
@@ -1589,6 +1612,19 @@
   let rattleTimer = 0;
   let crashFlash = 0;
   let crashShakeTimer = 0;
+  let crashRevealTimeoutId = null;
+  const crashShatterState = {
+    active: false,
+    elapsed: 0,
+    width: 400,
+    height: 720,
+    originX: 0.5,
+    originY: 0.44,
+    rays: [],
+    rings: [],
+    facets: [],
+    shards: [],
+  };
 
   // Entities, celebration & world-locked scenery
   let entities = [];
@@ -1707,21 +1743,25 @@
     const shortSide = Math.min(Math.max(1, cssWidth || 400), Math.max(1, cssHeight || 720));
     switch (userSettings.graphicsQuality) {
       case 'low':
-        return 1.5;
+        return 2.0;
       case 'normal':
         return 2.0;
-      case 'high':
-        return 2.0;
-      default: {
+      case 'high': {
         const minScale720p = 720 / shortSide;
         return Math.min(3.0, Math.max(2.0, minScale720p));
+      }
+      default: {
+        const minScale1080p = 1080 / shortSide;
+        return Math.min(4.0, Math.max(2.25, minScale1080p));
       }
     }
   }
 
   function syncUltra3DMode(cssWidth, cssHeight) {
     const wants3D =
-      userSettings.graphicsQuality === 'high' || userSettings.graphicsQuality === 'ultra';
+      userSettings.graphicsQuality === 'normal' ||
+      userSettings.graphicsQuality === 'high' ||
+      userSettings.graphicsQuality === 'ultra';
     const engine = window.BendskinUltra3D;
     let ready = false;
     if (wants3D && canvas3d && engine && engine.isSupported()) {
@@ -1741,10 +1781,12 @@
     const cssWidth = Math.max(1, rect.width);
     const cssHeight = Math.max(1, rect.height);
     const dprCap = getQualityDprCap(cssWidth, cssHeight);
-    const dpr =
-      userSettings.graphicsQuality === 'ultra'
-        ? Math.min(3.0, Math.max(window.devicePixelRatio || 1, dprCap))
-        : Math.min(window.devicePixelRatio || 1, dprCap);
+    let dpr = Math.min(window.devicePixelRatio || 1, dprCap);
+    if (userSettings.graphicsQuality === 'high') {
+      dpr = Math.min(3.0, Math.max(window.devicePixelRatio || 1, dprCap));
+    } else if (userSettings.graphicsQuality === 'ultra') {
+      dpr = Math.min(4.0, Math.max(window.devicePixelRatio || 1, dprCap));
+    }
 
     canvas.width = Math.round(cssWidth * dpr);
     canvas.height = Math.round(cssHeight * dpr);
@@ -1754,7 +1796,314 @@
     const scale = (cssWidth * dpr) / LOGICAL_WIDTH;
     ctx.setTransform(scale, 0, 0, scale, 0, 0);
 
+    if (crashShatterCanvas && shatterCtx) {
+      const shatterDpr = Math.min(2.5, Math.max(1, window.devicePixelRatio || 1));
+      crashShatterCanvas.width = Math.round(cssWidth * shatterDpr);
+      crashShatterCanvas.height = Math.round(cssHeight * shatterDpr);
+      shatterCtx.setTransform(shatterDpr, 0, 0, shatterDpr, 0, 0);
+      crashShatterState.width = cssWidth;
+      crashShatterState.height = cssHeight;
+    }
+
     syncUltra3DMode(cssWidth, cssHeight);
+  }
+
+  function clearBrokenScreenAnimation() {
+    if (crashRevealTimeoutId) {
+      clearTimeout(crashRevealTimeoutId);
+      crashRevealTimeoutId = null;
+    }
+    crashShatterState.active = false;
+    crashShatterState.elapsed = 0;
+    crashShatterState.rays = [];
+    crashShatterState.rings = [];
+    crashShatterState.facets = [];
+    crashShatterState.shards = [];
+    if (shatterCtx) {
+      shatterCtx.clearRect(0, 0, crashShatterState.width + 20, crashShatterState.height + 20);
+    }
+    if (crashShatterCanvas) {
+      crashShatterCanvas.classList.add('hidden');
+      crashShatterCanvas.classList.remove('crash-flash-pop');
+    }
+    if (appContainer) {
+      appContainer.classList.remove('crash-jolting');
+    }
+    if (gameoverScreen) {
+      gameoverScreen.classList.remove('shatter-reveal');
+    }
+  }
+
+  function triggerBrokenScreenAnimation(originXNorm = 0.5, originYNorm = 0.44) {
+    if (!crashShatterCanvas || !shatterCtx) return;
+
+    const rect = appContainer ? appContainer.getBoundingClientRect() : null;
+    const w = Math.max(1, rect ? rect.width : crashShatterState.width || 400);
+    const h = Math.max(1, rect ? rect.height : crashShatterState.height || 720);
+    const shatterDpr = Math.min(2.5, Math.max(1, window.devicePixelRatio || 1));
+    crashShatterCanvas.width = Math.round(w * shatterDpr);
+    crashShatterCanvas.height = Math.round(h * shatterDpr);
+    shatterCtx.setTransform(shatterDpr, 0, 0, shatterDpr, 0, 0);
+
+    crashShatterState.width = w;
+    crashShatterState.height = h;
+    crashShatterState.originX = Math.max(0.18, Math.min(0.82, originXNorm));
+    crashShatterState.originY = Math.max(0.24, Math.min(0.68, originYNorm));
+    crashShatterState.elapsed = 0;
+    crashShatterState.active = true;
+
+    const cx = w * crashShatterState.originX;
+    const cy = h * crashShatterState.originY;
+    const maxRadius = Math.hypot(Math.max(cx, w - cx), Math.max(cy, h - cy)) * 1.08;
+
+    const rayCount = 24;
+    const rays = [];
+    for (let i = 0; i < rayCount; i += 1) {
+      const baseAngle = (i / rayCount) * Math.PI * 2 + (Math.random() - 0.5) * 0.16;
+      const segs = 5 + Math.floor(Math.random() * 4);
+      const reach = maxRadius * (0.48 + Math.random() * 0.58);
+      const pts = [{ x: cx, y: cy }];
+      let angle = baseAngle;
+      let dist = 0;
+      for (let s = 1; s <= segs; s += 1) {
+        const nextDist = (s / segs) * reach;
+        angle += (Math.random() - 0.5) * 0.24;
+        const step = nextDist - dist;
+        const prev = pts[pts.length - 1];
+        pts.push({
+          x: prev.x + Math.cos(angle) * step,
+          y: prev.y + Math.sin(angle) * step,
+        });
+        dist = nextDist;
+      }
+
+      const branches = [];
+      if (Math.random() < 0.65 && pts.length > 3) {
+        const pivot = pts[1 + Math.floor(Math.random() * (pts.length - 2))];
+        const bAngle = baseAngle + (Math.random() < 0.5 ? -1 : 1) * (0.28 + Math.random() * 0.42);
+        const bLen = reach * (0.22 + Math.random() * 0.26);
+        const midX = pivot.x + Math.cos(bAngle + (Math.random() - 0.5) * 0.15) * (bLen * 0.52);
+        const midY = pivot.y + Math.sin(bAngle + (Math.random() - 0.5) * 0.15) * (bLen * 0.52);
+        const endX = midX + Math.cos(bAngle + (Math.random() - 0.5) * 0.24) * (bLen * 0.48);
+        const endY = midY + Math.sin(bAngle + (Math.random() - 0.5) * 0.24) * (bLen * 0.48);
+        branches.push([pivot, { x: midX, y: midY }, { x: endX, y: endY }]);
+      }
+
+      rays.push({
+        angle: baseAngle,
+        pts,
+        branches,
+        width: 0.9 + Math.random() * 1.4,
+      });
+    }
+    rays.sort((a, b) => a.angle - b.angle);
+    crashShatterState.rays = rays;
+
+    const ringRadii = [22, 46, 80, 124, 178, 240];
+    const rings = [];
+    const facets = [];
+    ringRadii.forEach((baseRad, ringIdx) => {
+      const arcs = [];
+      for (let i = 0; i < rays.length; i += 1) {
+        const nextIdx = (i + 1) % rays.length;
+        const rA = rays[i];
+        const rB = rays[nextIdx];
+        const jRadA = baseRad * (0.86 + Math.random() * 0.28);
+        const jRadB = baseRad * (0.86 + Math.random() * 0.28);
+        const p1 = { x: cx + Math.cos(rA.angle) * jRadA, y: cy + Math.sin(rA.angle) * jRadA };
+        const p2 = { x: cx + Math.cos(rB.angle) * jRadB, y: cy + Math.sin(rB.angle) * jRadB };
+        if (ringIdx < 4 || Math.random() < 0.72) {
+          arcs.push({ p1, p2 });
+        }
+        if (ringIdx < 3 && Math.random() < 0.55) {
+          const innerRad = ringIdx === 0 ? 5 : ringRadii[ringIdx - 1] * 0.95;
+          const p0a = { x: cx + Math.cos(rA.angle) * innerRad, y: cy + Math.sin(rA.angle) * innerRad };
+          const p0b = { x: cx + Math.cos(rB.angle) * innerRad, y: cy + Math.sin(rB.angle) * innerRad };
+          facets.push({
+            pts: [p0a, p1, p2, p0b],
+            alpha: (0.045 + Math.random() * 0.11) * (1 - ringIdx * 0.22),
+            tint: Math.random() < 0.35 ? '254, 249, 195' : '224, 242, 254',
+          });
+        }
+      }
+      rings.push({ arcs, alpha: Math.max(0.28, 0.92 - ringIdx * 0.12) });
+    });
+    crashShatterState.rings = rings;
+    crashShatterState.facets = facets;
+
+    const shards = [];
+    for (let i = 0; i < 36; i += 1) {
+      const ang = Math.random() * Math.PI * 2;
+      const spd = 140 + Math.random() * 520;
+      const size = 5 + Math.random() * 14;
+      shards.push({
+        x: cx + Math.cos(ang) * (4 + Math.random() * 24),
+        y: cy + Math.sin(ang) * (4 + Math.random() * 24),
+        vx: Math.cos(ang) * spd,
+        vy: Math.sin(ang) * spd - 90,
+        rot: Math.random() * Math.PI * 2,
+        vRot: (Math.random() - 0.5) * 18,
+        size,
+        skew: 0.42 + Math.random() * 0.45,
+        life: 0.7 + Math.random() * 0.45,
+        maxLife: 1.15,
+      });
+    }
+    crashShatterState.shards = shards;
+
+    crashShatterCanvas.classList.remove('hidden', 'crash-flash-pop');
+    void crashShatterCanvas.offsetWidth;
+    crashShatterCanvas.classList.add('crash-flash-pop');
+
+    if (appContainer) {
+      appContainer.classList.remove('crash-jolting');
+      void appContainer.offsetWidth;
+      appContainer.classList.add('crash-jolting');
+    }
+
+    renderBrokenScreenOverlay();
+  }
+
+  function renderBrokenScreenOverlay() {
+    if (!crashShatterState.active || !shatterCtx) return;
+    const w = crashShatterState.width;
+    const h = crashShatterState.height;
+    const cx = w * crashShatterState.originX;
+    const cy = h * crashShatterState.originY;
+    const t = crashShatterState.elapsed;
+
+    shatterCtx.clearRect(0, 0, w, h);
+
+    // Subtle dark impact vignette + cracked glass glare tint
+    const vigGrad = shatterCtx.createRadialGradient(cx, cy, 14, cx, cy, Math.max(w, h) * 0.85);
+    vigGrad.addColorStop(0, 'rgba(255, 255, 255, 0.20)');
+    vigGrad.addColorStop(0.16, 'rgba(186, 230, 253, 0.08)');
+    vigGrad.addColorStop(0.65, 'rgba(15, 23, 42, 0.14)');
+    vigGrad.addColorStop(1, 'rgba(2, 6, 23, 0.42)');
+    shatterCtx.fillStyle = vigGrad;
+    shatterCtx.fillRect(0, 0, w, h);
+
+    // Specular frosted glass facets
+    crashShatterState.facets.forEach((facet) => {
+      shatterCtx.fillStyle = `rgba(${facet.tint}, ${facet.alpha})`;
+      shatterCtx.beginPath();
+      facet.pts.forEach((pt, idx) => {
+        if (idx === 0) shatterCtx.moveTo(pt.x, pt.y);
+        else shatterCtx.lineTo(pt.x, pt.y);
+      });
+      shatterCtx.closePath();
+      shatterCtx.fill();
+    });
+
+    // Dark refraction shadow under cracks for thick windshield depth
+    shatterCtx.save();
+    shatterCtx.translate(1.5, 1.8);
+    shatterCtx.strokeStyle = 'rgba(2, 6, 23, 0.56)';
+    shatterCtx.lineCap = 'round';
+    shatterCtx.lineJoin = 'round';
+    crashShatterState.rays.forEach((ray) => {
+      shatterCtx.lineWidth = ray.width + 0.9;
+      shatterCtx.beginPath();
+      ray.pts.forEach((pt, idx) => {
+        if (idx === 0) shatterCtx.moveTo(pt.x, pt.y);
+        else shatterCtx.lineTo(pt.x, pt.y);
+      });
+      shatterCtx.stroke();
+      ray.branches.forEach((bPts) => {
+        shatterCtx.lineWidth = Math.max(0.8, ray.width * 0.72);
+        shatterCtx.beginPath();
+        bPts.forEach((pt, idx) => {
+          if (idx === 0) shatterCtx.moveTo(pt.x, pt.y);
+          else shatterCtx.lineTo(pt.x, pt.y);
+        });
+        shatterCtx.stroke();
+      });
+    });
+    crashShatterState.rings.forEach((ring) => {
+      shatterCtx.lineWidth = 1.4;
+      shatterCtx.beginPath();
+      ring.arcs.forEach((arc) => {
+        shatterCtx.moveTo(arc.p1.x, arc.p1.y);
+        shatterCtx.lineTo(arc.p2.x, arc.p2.y);
+      });
+      shatterCtx.stroke();
+    });
+    shatterCtx.restore();
+
+    // Bright icy-white glass fractures + spiderweb stress rings
+    shatterCtx.save();
+    shatterCtx.lineCap = 'round';
+    shatterCtx.lineJoin = 'round';
+    crashShatterState.rays.forEach((ray) => {
+      shatterCtx.strokeStyle = 'rgba(241, 245, 249, 0.9)';
+      shatterCtx.lineWidth = ray.width;
+      shatterCtx.beginPath();
+      ray.pts.forEach((pt, idx) => {
+        if (idx === 0) shatterCtx.moveTo(pt.x, pt.y);
+        else shatterCtx.lineTo(pt.x, pt.y);
+      });
+      shatterCtx.stroke();
+
+      ray.branches.forEach((bPts) => {
+        shatterCtx.strokeStyle = 'rgba(226, 232, 240, 0.76)';
+        shatterCtx.lineWidth = Math.max(0.7, ray.width * 0.65);
+        shatterCtx.beginPath();
+        bPts.forEach((pt, idx) => {
+          if (idx === 0) shatterCtx.moveTo(pt.x, pt.y);
+          else shatterCtx.lineTo(pt.x, pt.y);
+        });
+        shatterCtx.stroke();
+      });
+    });
+
+    crashShatterState.rings.forEach((ring) => {
+      shatterCtx.strokeStyle = `rgba(248, 250, 252, ${ring.alpha})`;
+      shatterCtx.lineWidth = 1.15;
+      shatterCtx.beginPath();
+      ring.arcs.forEach((arc) => {
+        shatterCtx.moveTo(arc.p1.x, arc.p1.y);
+        shatterCtx.lineTo(arc.p2.x, arc.p2.y);
+      });
+      shatterCtx.stroke();
+    });
+
+    // Crushed starburst impact core
+    shatterCtx.fillStyle = 'rgba(248, 250, 252, 0.92)';
+    shatterCtx.beginPath();
+    shatterCtx.arc(cx, cy, 5.5, 0, Math.PI * 2);
+    shatterCtx.fill();
+    shatterCtx.fillStyle = 'rgba(15, 23, 42, 0.78)';
+    shatterCtx.beginPath();
+    shatterCtx.arc(cx, cy, 2.5, 0, Math.PI * 2);
+    shatterCtx.fill();
+
+    // Dynamic bursting translucent glass splinters during first ~1.1s
+    crashShatterState.shards.forEach((shard) => {
+      if (shard.life <= 0) return;
+      const alpha = Math.max(0, Math.min(0.88, shard.life * 1.2));
+      shatterCtx.save();
+      shatterCtx.translate(shard.x, shard.y);
+      shatterCtx.rotate(shard.rot);
+      shatterCtx.fillStyle = `rgba(224, 242, 254, ${alpha * 0.75})`;
+      shatterCtx.strokeStyle = `rgba(255, 255, 255, ${alpha})`;
+      shatterCtx.lineWidth = 1;
+      shatterCtx.beginPath();
+      shatterCtx.moveTo(-shard.size * 0.6, -shard.size * 0.35);
+      shatterCtx.lineTo(shard.size * 0.75, 0);
+      shatterCtx.lineTo(-shard.size * 0.25, shard.size * shard.skew);
+      shatterCtx.closePath();
+      shatterCtx.fill();
+      shatterCtx.stroke();
+      shatterCtx.restore();
+    });
+
+    // Brief white impact flash in first 140ms
+    if (t < 0.14) {
+      const flashAlpha = (1 - t / 0.14) * 0.38;
+      shatterCtx.fillStyle = `rgba(255, 255, 255, ${flashAlpha})`;
+      shatterCtx.fillRect(0, 0, w, h);
+    }
+    shatterCtx.restore();
   }
 
   window.addEventListener('resize', resizeCanvas);
@@ -2798,8 +3147,8 @@
         GRAPHICS_DESCRIPTIONS[userSettings.graphicsQuality] || GRAPHICS_DESCRIPTIONS.ultra;
     }
     if (hudQualityBadgeEl) {
-      const labels = { low: 'LOW', normal: 'NORMAL', high: 'HIGH HD', ultra: 'ULTRA 720p+' };
-      hudQualityBadgeEl.textContent = labels[userSettings.graphicsQuality] || 'ULTRA 720p+';
+      const labels = { low: 'LOW', normal: 'MEDIUM', high: 'HIGH 720p+', ultra: 'ULTRA 1080p' };
+      hudQualityBadgeEl.textContent = labels[userSettings.graphicsQuality] || 'ULTRA 1080p';
     }
     const tiltOn = Boolean(userSettings.tiltSteering);
     if (btnHudTilt) {
@@ -2963,6 +3312,7 @@
   }
 
   function returnToHomeScreen() {
+    clearBrokenScreenAnimation();
     stopHorn();
     sound.updateEngine(0, false);
     keysHeld.throttle = false;
@@ -3022,6 +3372,7 @@
   }
 
   function startRun() {
+    clearBrokenScreenAnimation();
     sound.unlock();
     requestTiltPermission();
     recenterTiltBaseline();
@@ -3490,7 +3841,11 @@
     return payload;
   }
 
-  function triggerGameOver(withCrashImpact) {
+  function triggerGameOver(withCrashImpact, impactXNorm = null) {
+    if (crashRevealTimeoutId) {
+      clearTimeout(crashRevealTimeoutId);
+      crashRevealTimeoutId = null;
+    }
     const finalMeters = Math.max(1, Math.floor(distanceMeters));
     const beatPrevRecord = finalMeters > bestMeters;
     if (beatPrevRecord) {
@@ -3600,7 +3955,32 @@
       }
     }
 
-    showScreen(GAME_STATE.GAMEOVER);
+    if (withCrashImpact) {
+      currentState = GAME_STATE.GAMEOVER;
+      if (startScreen) startScreen.classList.add('hidden');
+      if (hudScreen) hudScreen.classList.add('hidden');
+      if (pauseModal) pauseModal.classList.add('hidden');
+      if (gameoverScreen) {
+        gameoverScreen.classList.remove('shatter-reveal');
+        gameoverScreen.classList.add('hidden');
+      }
+      const shatterOriginX =
+        typeof impactXNorm === 'number' && Number.isFinite(impactXNorm)
+          ? impactXNorm
+          : 0.5 + (Math.random() - 0.5) * 0.14;
+      triggerBrokenScreenAnimation(shatterOriginX, 0.44);
+      crashRevealTimeoutId = window.setTimeout(() => {
+        crashRevealTimeoutId = null;
+        if (currentState !== GAME_STATE.GAMEOVER) return;
+        showScreen(GAME_STATE.GAMEOVER);
+        if (gameoverScreen) {
+          gameoverScreen.classList.add('shatter-reveal');
+        }
+      }, 430);
+    } else {
+      clearBrokenScreenAnimation();
+      showScreen(GAME_STATE.GAMEOVER);
+    }
   }
 
   function handleSaveProfile() {
@@ -3946,6 +4326,7 @@
   }
 
   function completeReviveResume() {
+    clearBrokenScreenAnimation();
     revivedThisRun = true;
     // Clear any hazards within 48m ahead so rider resumes safely
     entities = entities.filter(
@@ -4524,7 +4905,8 @@
           }
           continue;
         }
-        triggerGameOver(true);
+        const impactXNorm = Math.max(0.18, Math.min(0.82, proj.x / LOGICAL_WIDTH));
+        triggerGameOver(true, impactXNorm);
         return;
       }
     }
@@ -4594,6 +4976,19 @@
     }
     if (crashShakeTimer > 0) {
       crashShakeTimer = Math.max(0, crashShakeTimer - dt);
+    }
+    if (crashShatterState.active) {
+      crashShatterState.elapsed += dt;
+      for (let s = 0; s < crashShatterState.shards.length; s += 1) {
+        const shard = crashShatterState.shards[s];
+        if (shard.life <= 0) continue;
+        shard.x += shard.vx * dt;
+        shard.y += shard.vy * dt;
+        shard.vx *= Math.max(0, 1 - 1.6 * dt);
+        shard.vy += 980 * dt;
+        shard.rot += shard.vRot * dt;
+        shard.life = Math.max(0, shard.life - dt);
+      }
     }
 
     // Freeze road & obstacles immediately on GAMEOVER or PAUSED
@@ -4978,8 +5373,8 @@
 
   function drawSkyAndHorizon(horizonY) {
     const isLow = false;
-    const isHigh3D = isQualityAtLeast('normal');
-    const isUltra = userSettings.graphicsQuality === 'ultra';
+    const isHigh3D = isQualityAtLeast('low');
+    const isUltra = isQualityAtLeast('high');
 
     if (isLow) {
       ctx.fillStyle = '#13243f';
@@ -5188,8 +5583,8 @@
     const cameraZ = getActiveCameraZ();
     const segLen = WORLD_SPACE.ROAD_SEGMENT_METERS;
     const isLow = false;
-    const isHigh3D = isQualityAtLeast('normal');
-    const isUltra = userSettings.graphicsQuality === 'ultra';
+    const isHigh3D = isQualityAtLeast('low');
+    const isUltra = isQualityAtLeast('high');
 
     // Dusty laterite earth shoulders
     if (isLow) {
@@ -5399,8 +5794,8 @@
     const p = projectPoint(laneCoord, prop.z);
     const s = p.scale;
     const isLow = false;
-    const isHigh3D = isQualityAtLeast('normal');
-    const isUltra = userSettings.graphicsQuality === 'ultra';
+    const isHigh3D = isQualityAtLeast('low');
+    const isUltra = isQualityAtLeast('high');
     const horizonAlpha = Math.min(1, prop.z / 0.05);
 
     ctx.save();
@@ -5627,7 +6022,7 @@
     const wheelPhase = entity.wheelPhase || 0;
     const p = projectPoint(lane, entity.z);
     const s = p.scale;
-    const isUltra = userSettings.graphicsQuality === 'ultra';
+    const isUltra = isQualityAtLeast('high');
 
     switch (entity.type) {
       case 'pothole': {
@@ -6050,7 +6445,7 @@
     const s = p.scale;
     const wheelPhase = entity.wheelPhase || 0;
     const isLow = false;
-    const isHigh3D = isQualityAtLeast('normal');
+    const isHigh3D = isQualityAtLeast('low');
     const horizonAlpha = Math.min(1, entity.z / 0.05);
 
     ctx.save();
@@ -6530,7 +6925,7 @@
     ctx.stroke();
 
     // Ultra HD+: live approaching/passed vehicle headlights in side mirror
-    if (userSettings.graphicsQuality === 'ultra') {
+    if (isQualityAtLeast('high')) {
       entities.forEach((ent) => {
         if (!ENTITY_CONFIG[ent.type].isVehicle) return;
         const ahead = ent.worldZ - cameraZ;
@@ -6658,8 +7053,8 @@
     ctx.scale(0.72, 0.72);
     ctx.rotate(handlebarAngle);
 
-    // Warm forward headlight cone (enabled on Normal, High & Ultra)
-    if (isQualityAtLeast('normal')) {
+    // Warm forward headlight cone (enabled across all upgraded 2.5D/3D tiers)
+    if (isQualityAtLeast('low')) {
       const beamGrad = ctx.createLinearGradient(0, -245, 0, -32);
       beamGrad.addColorStop(0, 'rgba(254, 240, 138, 0)');
       beamGrad.addColorStop(1, 'rgba(254, 240, 138, 0.16)');
@@ -6917,6 +7312,7 @@
         ctx.fillStyle = `rgba(220, 38, 38, ${crashFlash * 0.45})`;
         ctx.fillRect(0, 0, LOGICAL_WIDTH, logicalHeight);
       }
+      renderBrokenScreenOverlay();
       return;
     }
 
@@ -6964,6 +7360,7 @@
       ctx.fillStyle = `rgba(220, 38, 38, ${crashFlash * 0.45})`;
       ctx.fillRect(0, 0, LOGICAL_WIDTH, logicalHeight);
     }
+    renderBrokenScreenOverlay();
   }
 
   // =========================================================
