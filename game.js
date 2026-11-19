@@ -67,10 +67,10 @@
   const GRAPHICS_QUALITIES = ['low', 'normal', 'high', 'ultra'];
 
   const GRAPHICS_DESCRIPTIONS = {
-    low: 'Low quality active: perspective-extruded 2.5D vehicles, raised curbs & buildings, headbeams & mirrors.',
-    normal: 'Medium quality active: real-time Three.js WebGL 3D highway, traffic lights, shadows & armored gloves.',
-    high: 'High 720p+ Engine: crisp 720p+ supersampled 3D cockpit, visible rider fingers & twin digital/analog dashboard.',
-    ultra: 'Ultra HD 1080p active: full 1080p supersampled render scale, MSAA anti-aliasing, 16x anisotropic PBR textures, sky reflections & sculpted vehicles, buildings & trees.',
+    low: 'Low 3D active: real-time Three.js WebGL 3D highway, traffic lights, shadows & armored gloves.',
+    normal: 'Medium 720p+ active: crisp 720p+ supersampled 3D cockpit, visible rider fingers & twin digital/analog dashboard.',
+    high: 'High 1080p PBR active: 1080p supersampled render scale, MSAA anti-aliasing, 16x anisotropic PBR textures & sculpted cars, buildings & trees.',
+    ultra: 'Ultra Real 1080p+ active: photorealistic normal-mapped asphalt, sidewalks, guardrails & gantries, real motorcycle cockpit + anatomical human hands/watch, real cars with drivers & interiors, real rival riders & roadside pedestrians.',
   };
 
   // Uniform metadata table: stationary hazards stay at speedKmh: 0 (world-locked),
@@ -1744,21 +1744,24 @@
     switch (userSettings.graphicsQuality) {
       case 'low':
         return 2.0;
-      case 'normal':
-        return 2.0;
-      case 'high': {
+      case 'normal': {
         const minScale720p = 720 / shortSide;
         return Math.min(3.0, Math.max(2.0, minScale720p));
       }
-      default: {
+      case 'high': {
         const minScale1080p = 1080 / shortSide;
         return Math.min(4.0, Math.max(2.25, minScale1080p));
+      }
+      default: {
+        const minScale1080p = 1080 / shortSide;
+        return Math.min(4.0, Math.max(2.5, minScale1080p));
       }
     }
   }
 
   function syncUltra3DMode(cssWidth, cssHeight) {
     const wants3D =
+      userSettings.graphicsQuality === 'low' ||
       userSettings.graphicsQuality === 'normal' ||
       userSettings.graphicsQuality === 'high' ||
       userSettings.graphicsQuality === 'ultra';
@@ -1782,9 +1785,9 @@
     const cssHeight = Math.max(1, rect.height);
     const dprCap = getQualityDprCap(cssWidth, cssHeight);
     let dpr = Math.min(window.devicePixelRatio || 1, dprCap);
-    if (userSettings.graphicsQuality === 'high') {
+    if (userSettings.graphicsQuality === 'normal') {
       dpr = Math.min(3.0, Math.max(window.devicePixelRatio || 1, dprCap));
-    } else if (userSettings.graphicsQuality === 'ultra') {
+    } else if (userSettings.graphicsQuality === 'high' || userSettings.graphicsQuality === 'ultra') {
       dpr = Math.min(4.0, Math.max(window.devicePixelRatio || 1, dprCap));
     }
 
@@ -3147,8 +3150,8 @@
         GRAPHICS_DESCRIPTIONS[userSettings.graphicsQuality] || GRAPHICS_DESCRIPTIONS.ultra;
     }
     if (hudQualityBadgeEl) {
-      const labels = { low: 'LOW', normal: 'MEDIUM', high: 'HIGH 720p+', ultra: 'ULTRA 1080p' };
-      hudQualityBadgeEl.textContent = labels[userSettings.graphicsQuality] || 'ULTRA 1080p';
+      const labels = { low: 'LOW 3D', normal: 'MED 720p+', high: 'HIGH 1080p', ultra: 'ULTRA REAL' };
+      hudQualityBadgeEl.textContent = labels[userSettings.graphicsQuality] || 'ULTRA REAL';
     }
     const tiltOn = Boolean(userSettings.tiltSteering);
     if (btnHudTilt) {

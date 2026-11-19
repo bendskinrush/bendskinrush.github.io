@@ -31,6 +31,11 @@
   let groundMatUltra = null;
   let ultraRoadAccents = null;
   let ultraEnvTex = null;
+  let skyDomeMesh = null;
+  let skyMatStd = null;
+  let skyMatReal = null;
+  let realEnvTex = null;
+  let realRoadInfra = null;
   let appliedSceneQuality = null;
 
   // Road target marker lines (Personal Best & Rival)
@@ -39,6 +44,8 @@
 
   // First-person bike & articulated rider arms/gloves
   let bikeRoot = null;
+  let cockpitStdGroup = null;
+  let cockpitRealRig = null;
   let steeringGroup = null;
   let rightBrakeLever = null;
   let rightFingersGroup = null;
@@ -70,15 +77,19 @@
   let garageSpinSpeed = 0.55;
   let garageLiveryId = 'classic';
 
-  // Pooled 3D scenery & entity meshes (separated cleanly for Standard vs Ultra 1080p)
+  // Pooled 3D scenery & entity meshes (separated cleanly for Standard, Ultra 1080p, and Ultra Realistic Cinema)
   const propMeshMapStd = new WeakMap();
   const propActiveStd = new Set();
   const propMeshMapUltra = new WeakMap();
   const propActiveUltra = new Set();
+  const propMeshMapReal = new WeakMap();
+  const propActiveReal = new Set();
   const entityMeshMapStd = new WeakMap();
   const entityActiveStd = new Set();
   const entityMeshMapUltra = new WeakMap();
   const entityActiveUltra = new Set();
+  const entityMeshMapReal = new WeakMap();
+  const entityActiveReal = new Set();
   let ultraPropCounter = 0;
 
   // Shared materials/textures/geometries cache for crisp 60fps performance
@@ -701,9 +712,12 @@
 
   function createSkyDome() {
     const skyGeo = new THREE.SphereGeometry(280, 32, 20);
-    const skyMat = createSkyDomeShaderMat();
-    const dome = new THREE.Mesh(skyGeo, skyMat);
-    scene.add(dome);
+    skyMatStd = createSkyDomeShaderMat();
+    if (window.BendskinRealism3D && typeof window.BendskinRealism3D.createRealSkyDomeShaderMat === 'function') {
+      skyMatReal = window.BendskinRealism3D.createRealSkyDomeShaderMat();
+    }
+    skyDomeMesh = new THREE.Mesh(skyGeo, skyMatReal || skyMatStd);
+    scene.add(skyDomeMesh);
   }
 
   function buildEnvironmentReflectionMap(targetRenderer) {
@@ -729,10 +743,21 @@
     }
   }
 
+  function getActivePoolKey(mode) {
+    if (mode === 'ultra' && window.BendskinRealism3D) return 'real';
+    if (mode === 'high' || mode === 'ultra') return 'ultra';
+    return 'std';
+  }
+
   function applyTextureAnisotropy(mode) {
     if (!renderer || !renderer.capabilities) return;
     const hwMax = renderer.capabilities.getMaxAnisotropy() || 4;
-    const targetAniso = mode === 'ultra' ? Math.min(16, hwMax) : mode === 'high' ? Math.min(8, hwMax) : Math.min(4, hwMax);
+    const targetAniso =
+      mode === 'ultra' || mode === 'high'
+        ? Math.min(16, hwMax)
+        : mode === 'normal'
+          ? Math.min(8, hwMax)
+          : Math.min(4, hwMax);
     Object.values(texCache).forEach((tex) => {
       if (tex) {
         tex.anisotropy = targetAniso;
@@ -743,29 +768,48 @@
       dashTexture.anisotropy = targetAniso;
       dashTexture.needsUpdate = true;
     }
+    if (window.BendskinRealism3D && typeof window.BendskinRealism3D.setAnisotropy === 'function') {
+      window.BendskinRealism3D.setAnisotropy(targetAniso);
+    }
   }
 
   function applyQualityConfigToScene(mode) {
     if (!scene || !renderer || appliedSceneQuality === mode) return;
     appliedSceneQuality = mode;
-    const isUltra = mode === 'ultra';
-    const isHighOrAbove = mode === 'high' || isUltra;
+    const poolKey = getActivePoolKey(mode);
+    const isReal = poolKey === 'real';
+    const isUltraPbr = poolKey === 'ultra';
+    const isHighShadow = mode === 'normal' || mode === 'high' || mode === 'ultra';
 
     applyTextureAnisotropy(mode);
 
-    scene.environment = isUltra && ultraEnvTex ? ultraEnvTex : null;
+    if (skyDomeMesh) {
+      skyDomeMesh.material = isReal && skyMatReal ? skyMatReal : skyMatStd;
+    }
+
+    scene.environment =
+      isReal && realEnvTex ? realEnvTex : (isReal || isUltraPbr) && ultraEnvTex ? ultraEnvTex : null;
 
     if (roadMesh && roadMatStd && roadMatUltra) {
-      roadMesh.material = isUltra ? roadMatUltra : roadMatStd;
+      roadMesh.material =
+        isReal && realRoadInfra ? realRoadInfra.roadMat : isUltraPbr ? roadMatUltra : roadMatStd;
     }
     if (groundMesh && groundMatStd && groundMatUltra) {
-      groundMesh.material = isUltra ? groundMatUltra : groundMatStd;
+      groundMesh.material =
+        isReal && realRoadInfra ? realRoadInfra.groundMat : isUltraPbr ? groundMatUltra : groundMatStd;
     }
     if (ultraRoadAccents) {
-      ultraRoadAccents.visible = isUltra;
+      ultraRoadAccents.visible = isUltraPbr;
+    }
+    if (realRoadInfra && realRoadInfra.roadGroup) {
+      realRoadInfra.roadGroup.visible = isReal;
+    }
+    if (cockpitStdGroup && cockpitRealRig) {
+      cockpitStdGroup.visible = !isReal;
+      cockpitRealRig.root.visible = isReal;
     }
     if (sunLight) {
-      const targetShadowSize = isHighOrAbove ? 2048 : 1024;
+      const targetShadowSize = isHighShadow ? 2048 : 1024;
       if (sunLight.shadow.mapSize.width !== targetShadowSize) {
         sunLight.shadow.mapSize.width = targetShadowSize;
         sunLight.shadow.mapSize.height = targetShadowSize;
@@ -774,34 +818,55 @@
           sunLight.shadow.map = null;
         }
       }
-      sunLight.intensity = isUltra ? 1.68 : 1.48;
+      sunLight.intensity = isReal ? 1.82 : isUltraPbr ? 1.68 : 1.48;
     }
     if (hemiLight) {
-      hemiLight.intensity = isUltra ? 1.05 : 0.92;
+      hemiLight.intensity = isReal ? 1.12 : isUltraPbr ? 1.05 : 0.92;
+    }
+    if (scene.fog) {
+      scene.fog.density = isReal ? 0.0068 : 0.0082;
     }
 
     // Hide inactive tier pools when quality changes dynamically
-    const hidePool = (pool) => {
+    const hidePropPool = (pool) => {
       pool.forEach((m) => {
         m.visible = false;
       });
+      pool.clear();
     };
-    if (isUltra) {
-      hidePool(propActiveStd);
-      propActiveStd.clear();
-      entityActiveStd.forEach((m) => scene.remove(m));
-      entityActiveStd.clear();
-    } else {
-      hidePool(propActiveUltra);
-      propActiveUltra.clear();
-      entityActiveUltra.forEach((m) => scene.remove(m));
-      entityActiveUltra.clear();
+    const clearEntityPool = (pool) => {
+      pool.forEach((m) => scene.remove(m));
+      pool.clear();
+    };
+    if (poolKey !== 'std') {
+      hidePropPool(propActiveStd);
+      clearEntityPool(entityActiveStd);
+    }
+    if (poolKey !== 'ultra') {
+      hidePropPool(propActiveUltra);
+      clearEntityPool(entityActiveUltra);
+    }
+    if (poolKey !== 'real') {
+      hidePropPool(propActiveReal);
+      clearEntityPool(entityActiveReal);
     }
   }
 
   function createEnvironment() {
     createSkyDome();
     ultraEnvTex = buildEnvironmentReflectionMap(renderer);
+    if (window.BendskinRealism3D) {
+      window.BendskinRealism3D.initAssets(renderer);
+      realEnvTex = window.BendskinRealism3D.buildRealEnvironmentMap(renderer);
+      realRoadInfra = window.BendskinRealism3D.createRealRoadInfrastructure(
+        LANE_WIDTH_3D,
+        ROAD_WIDTH_3D,
+        ROAD_LENGTH_3D
+      );
+      if (realRoadInfra && realRoadInfra.roadGroup) {
+        scene.add(realRoadInfra.roadGroup);
+      }
+    }
 
     scene.fog = new THREE.FogExp2('#9a3412', 0.0082);
 
@@ -1143,23 +1208,39 @@
     if (cockpitTrimMat) {
       cockpitTrimMat.color.set(liv.trim);
     }
+    if (cockpitRealRig && cockpitRealRig.tankMat) {
+      cockpitRealRig.tankMat.color.set(liv.paint);
+    }
+    if (cockpitRealRig && cockpitRealRig.trimMat) {
+      cockpitRealRig.trimMat.color.set(liv.trim);
+    }
   }
 
   function buildBikeCockpit() {
     bikeRoot = new THREE.Group();
     scene.add(bikeRoot);
+    cockpitStdGroup = new THREE.Group();
+    bikeRoot.add(cockpitStdGroup);
 
     dashCanvas = document.createElement('canvas');
-    dashCanvas.width = 512;
-    dashCanvas.height = 512;
+    dashCanvas.width = 1024;
+    dashCanvas.height = 1024;
     dashCtx = dashCanvas.getContext('2d');
+    dashCtx.setTransform(2, 0, 0, 2, 0, 0);
     dashTexture = new THREE.CanvasTexture(dashCanvas);
     dashTexture.encoding = THREE.sRGBEncoding;
+    dashTexture.generateMipmaps = true;
+    dashTexture.minFilter = THREE.LinearMipmapLinearFilter;
+    dashTexture.magFilter = THREE.LinearFilter;
     if (renderer && renderer.capabilities) {
-      dashTexture.anisotropy = Math.min(8, renderer.capabilities.getMaxAnisotropy() || 4);
+      dashTexture.anisotropy = Math.min(16, renderer.capabilities.getMaxAnisotropy() || 4);
     }
 
     const liv = getBikeLivery(currentLiveryId);
+    if (window.BendskinRealism3D && typeof window.BendskinRealism3D.buildRealCockpit === 'function') {
+      cockpitRealRig = window.BendskinRealism3D.buildRealCockpit(liv, dashTexture);
+      bikeRoot.add(cockpitRealRig.root);
+    }
     cockpitTankMat = new THREE.MeshPhysicalMaterial({
       color: liv.paint,
       roughness: 0.16,
@@ -1198,25 +1279,25 @@
     tankMain.rotation.x = Math.PI * 0.44;
     tankMain.scale.set(1.24, 1, 0.72);
     tankMain.position.set(0, -0.16, 0.05);
-    bikeRoot.add(tankMain);
+    cockpitStdGroup.add(tankMain);
 
     // Center tank stripe & brushed CNC aero filler cap
     const tankStripe = new THREE.Mesh(new THREE.BoxGeometry(0.058, 0.014, 0.41), cockpitTrimMat);
     tankStripe.position.set(0, -0.064, 0.04);
     tankStripe.rotation.x = 0.18;
-    bikeRoot.add(tankStripe);
+    cockpitStdGroup.add(tankStripe);
 
     const fuelCapRing = new THREE.Mesh(new THREE.CylinderGeometry(0.042, 0.045, 0.016, 20), chromeMetal);
     fuelCapRing.position.set(0, -0.055, -0.02);
-    bikeRoot.add(fuelCapRing);
+    cockpitStdGroup.add(fuelCapRing);
     const fuelCapCore = new THREE.Mesh(new THREE.CylinderGeometry(0.026, 0.026, 0.02, 12), darkMetal);
     fuelCapCore.position.set(0, -0.054, -0.02);
-    bikeRoot.add(fuelCapCore);
+    cockpitStdGroup.add(fuelCapCore);
 
     // Steering triple-clamp + forks + nose cowling + twin-cluster dash + handlebars + arms
     steeringGroup = new THREE.Group();
     steeringGroup.position.set(0, 0.05, -0.36);
-    bikeRoot.add(steeringGroup);
+    cockpitStdGroup.add(steeringGroup);
 
     // Dual upside-down gold/anodized front fork tubes + blue anodized preload caps
     [-1, 1].forEach((side) => {
@@ -3321,7 +3402,12 @@
 
   function resize(cssWidth, cssHeight, qualityMode) {
     if (!initialized || !renderer || !camera) return;
-    if (qualityMode === 'normal' || qualityMode === 'high' || qualityMode === 'ultra') {
+    if (
+      qualityMode === 'low' ||
+      qualityMode === 'normal' ||
+      qualityMode === 'high' ||
+      qualityMode === 'ultra'
+    ) {
       currentQualityMode = qualityMode;
     }
     applyQualityConfigToScene(currentQualityMode);
@@ -3332,16 +3418,21 @@
     const sysDpr = window.devicePixelRatio || 1;
     let dpr;
     if (currentQualityMode === 'ultra') {
-      // Best-of-the-best 1080p+ supersampled render scale on every viewport
+      // Photorealistic Cinema 1080p+ supersampled render scale on every viewport
+      const scale1080p = 1080 / shortSide;
+      const safeMax = getSafeMaxPixelRatio(w, h);
+      dpr = Math.min(safeMax, Math.max(sysDpr, scale1080p, 2.5));
+    } else if (currentQualityMode === 'high') {
+      // Previous Ultra: 1080p PBR crisp backing resolution
       const scale1080p = 1080 / shortSide;
       const safeMax = getSafeMaxPixelRatio(w, h);
       dpr = Math.min(safeMax, Math.max(sysDpr, scale1080p, 2.35));
-    } else if (currentQualityMode === 'high') {
-      // Previous Ultra: 720p+ crisp backing resolution
+    } else if (currentQualityMode === 'normal') {
+      // Previous High: 720p+ crisp backing resolution
       const scale720p = 720 / shortSide;
       dpr = Math.min(3.0, Math.max(sysDpr, scale720p, 1.85));
     } else {
-      // Medium ('normal', previous High HD)
+      // Low 3D (previous Medium WebGL 3D)
       dpr = Math.min(2.0, Math.max(sysDpr, 1.25));
     }
     renderer.setPixelRatio(dpr);
@@ -3390,20 +3481,24 @@
       }
     }
 
-    const useUltraPool = currentQualityMode === 'ultra';
+    const poolKey = getActivePoolKey(currentQualityMode);
 
     // Smooth road & ground texture scrolling synced 1:1 with world meters
-    const roadOff = -(cameraZ / 14) % 1;
-    const latOff = -(cameraZ / 8) % 1;
-    if (roadTexture) roadTexture.offset.y = roadOff;
-    if (roadUltraTexture) roadUltraTexture.offset.y = roadOff;
-    if (roadBumpTexture) roadBumpTexture.offset.y = roadOff;
-    if (roadRoughTexture) roadRoughTexture.offset.y = roadOff;
-    if (lateriteTexture) lateriteTexture.offset.y = latOff;
-    if (lateriteUltraTexture) lateriteUltraTexture.offset.y = latOff;
-    if (lateriteBumpTexture) lateriteBumpTexture.offset.y = latOff;
-    if (ultraRoadAccents && ultraRoadAccents.visible) {
-      ultraRoadAccents.position.z = ((cameraZ % 8) + 8) % 8;
+    if (poolKey === 'real' && realRoadInfra) {
+      realRoadInfra.scroll(cameraZ);
+    } else {
+      const roadOff = -(cameraZ / 14) % 1;
+      const latOff = -(cameraZ / 8) % 1;
+      if (roadTexture) roadTexture.offset.y = roadOff;
+      if (roadUltraTexture) roadUltraTexture.offset.y = roadOff;
+      if (roadBumpTexture) roadBumpTexture.offset.y = roadOff;
+      if (roadRoughTexture) roadRoughTexture.offset.y = roadOff;
+      if (lateriteTexture) lateriteTexture.offset.y = latOff;
+      if (lateriteUltraTexture) lateriteUltraTexture.offset.y = latOff;
+      if (lateriteBumpTexture) lateriteBumpTexture.offset.y = latOff;
+      if (ultraRoadAccents && ultraRoadAccents.visible) {
+        ultraRoadAccents.position.z = ((cameraZ % 8) + 8) % 8;
+      }
     }
 
     // Dynamic FOV & rider head camera placement inside active road lane
@@ -3427,38 +3522,57 @@
     camera.lookAt(camX * 0.85, 1.18 - suspensionPitch * 0.01, -30);
     camera.rotation.z += worldRollAngle * 1.15;
 
-    // Position 3D bike rig & animate fingers, lever, throttle wrist, thumb horn switch
-    if (bikeRoot && steeringGroup) {
+    // Position 3D bike rig & animate fingers, lever, throttle wrist, thumb horn switch & keychain
+    const activeRig =
+      poolKey === 'real' && cockpitRealRig
+        ? cockpitRealRig
+        : {
+            steeringGroup,
+            rightBrakeLever,
+            rightLeverFingersGroup,
+            rightFingersGroup,
+            rightGripPivot,
+            leftThumbPivot,
+            leftArmGroup,
+            keychainPivot: null,
+          };
+
+    if (bikeRoot && activeRig && activeRig.steeringGroup) {
       const bob = Math.sin(engineVibPhase) * 0.004;
       const wheelie =
         celebrationTimer > 0 ? Math.sin(Math.min(1, celebrationTimer / 2.5) * Math.PI) * 0.08 : 0;
       bikeRoot.position.set(camX + rattleX, camY - 0.31 + bob + rattleY, -0.45);
       bikeRoot.rotation.set(wheelie - suspensionPitch * 0.006, 0, worldRollAngle * 1.5);
 
-      steeringGroup.rotation.y = -handlebarAngle * 0.72;
-      if (rightBrakeLever) {
-        rightBrakeLever.rotation.y = braking ? -0.24 : 0;
+      activeRig.steeringGroup.rotation.y = -handlebarAngle * 0.72;
+      if (activeRig.rightBrakeLever) {
+        activeRig.rightBrakeLever.rotation.y = braking ? -0.24 : 0;
       }
-      if (rightLeverFingersGroup) {
-        rightLeverFingersGroup.rotation.x = braking ? 0.42 : -0.08;
+      if (activeRig.rightLeverFingersGroup) {
+        activeRig.rightLeverFingersGroup.rotation.x = braking ? 0.42 : -0.08;
       }
-      if (rightFingersGroup) {
-        rightFingersGroup.rotation.x = braking ? 0.14 : 0;
+      if (activeRig.rightFingersGroup) {
+        activeRig.rightFingersGroup.rotation.x = braking ? 0.14 : 0;
       }
-      if (rightGripPivot) {
-        rightGripPivot.rotation.x = !braking && throttling ? 0.09 : 0;
+      if (activeRig.rightGripPivot) {
+        activeRig.rightGripPivot.rotation.x = !braking && throttling ? 0.09 : 0;
       }
-      if (leftThumbPivot) {
-        leftThumbPivot.rotation.y = hornHeld ? -0.42 : 0;
-        leftThumbPivot.rotation.x = hornHeld ? 0.25 : 0;
+      if (activeRig.leftThumbPivot) {
+        activeRig.leftThumbPivot.rotation.y = hornHeld ? -0.42 : 0;
+        activeRig.leftThumbPivot.rotation.x = hornHeld ? 0.25 : 0;
       }
-      if (leftArmGroup) {
+      if (activeRig.keychainPivot) {
+        const accelSwing = braking ? -0.35 : throttling ? 0.28 : 0.08;
+        activeRig.keychainPivot.rotation.x = accelSwing + Math.sin(engineVibPhase * 0.9) * 0.06;
+        activeRig.keychainPivot.rotation.z = -worldRollAngle * 2.2 + Math.cos(engineVibPhase * 0.7) * 0.05;
+      }
+      if (activeRig.leftArmGroup) {
         if (celebrationTimer > 0) {
-          leftArmGroup.position.set(-0.04, 0.18 + Math.sin(celebrationTimer * 14) * 0.04, 0.03);
-          leftArmGroup.rotation.x = 0.6;
+          activeRig.leftArmGroup.position.set(-0.04, 0.18 + Math.sin(celebrationTimer * 14) * 0.04, 0.03);
+          activeRig.leftArmGroup.rotation.x = 0.6;
         } else {
-          leftArmGroup.position.set(0, 0, 0);
-          leftArmGroup.rotation.x = 0;
+          activeRig.leftArmGroup.position.set(0, 0, 0);
+          activeRig.leftArmGroup.rotation.x = 0;
         }
       }
 
@@ -3515,8 +3629,10 @@
     }
 
     // Sync roadside props using selected tier's pool
-    const propMap = useUltraPool ? propMeshMapUltra : propMeshMapStd;
-    const propActive = useUltraPool ? propActiveUltra : propActiveStd;
+    const propMap =
+      poolKey === 'real' ? propMeshMapReal : poolKey === 'ultra' ? propMeshMapUltra : propMeshMapStd;
+    const propActive =
+      poolKey === 'real' ? propActiveReal : poolKey === 'ultra' ? propActiveUltra : propActiveStd;
     const nextPropActive = new Set();
     for (let i = 0; i < roadsideProps.length; i += 1) {
       const prop = roadsideProps[i];
@@ -3524,9 +3640,12 @@
       if (ahead < -10 || ahead > 145) continue;
       let mesh = propMap.get(prop);
       if (!mesh) {
-        mesh = useUltraPool
-          ? createUltraPropMesh(prop.kind, prop.side)
-          : createPropMesh(prop.kind);
+        mesh =
+          poolKey === 'real' && window.BendskinRealism3D
+            ? window.BendskinRealism3D.createRealPropMesh(prop.kind, prop.side)
+            : poolKey === 'ultra'
+              ? createUltraPropMesh(prop.kind, prop.side)
+              : createPropMesh(prop.kind);
         propMap.set(prop, mesh);
         scene.add(mesh);
       }
@@ -3544,8 +3663,10 @@
     nextPropActive.forEach((m) => propActive.add(m));
 
     // Sync road hazards, traffic & custom 3D power-ups using selected tier's pool
-    const entMap = useUltraPool ? entityMeshMapUltra : entityMeshMapStd;
-    const entActive = useUltraPool ? entityActiveUltra : entityActiveStd;
+    const entMap =
+      poolKey === 'real' ? entityMeshMapReal : poolKey === 'ultra' ? entityMeshMapUltra : entityMeshMapStd;
+    const entActive =
+      poolKey === 'real' ? entityActiveReal : poolKey === 'ultra' ? entityActiveUltra : entityActiveStd;
     const nextEntityActive = new Set();
     for (let i = 0; i < entities.length; i += 1) {
       const entity = entities[i];
@@ -3555,9 +3676,12 @@
 
       let mesh = entMap.get(entity);
       if (!mesh) {
-        mesh = useUltraPool
-          ? createUltraEntityMesh(entity.type)
-          : createEntityMesh(entity.type);
+        mesh =
+          poolKey === 'real' && window.BendskinRealism3D
+            ? window.BendskinRealism3D.createRealEntityMesh(entity.type)
+            : poolKey === 'ultra'
+              ? createUltraEntityMesh(entity.type)
+              : createEntityMesh(entity.type);
         entMap.set(entity, mesh);
       }
       if (mesh.parent !== scene) {
@@ -3869,7 +3993,10 @@
         garageRenderer.outputEncoding = THREE.sRGBEncoding;
 
         garageScene = new THREE.Scene();
-        const garageEnv = buildEnvironmentReflectionMap(garageRenderer);
+        const garageEnv =
+          window.BendskinRealism3D && typeof window.BendskinRealism3D.buildRealEnvironmentMap === 'function'
+            ? window.BendskinRealism3D.buildRealEnvironmentMap(garageRenderer)
+            : buildEnvironmentReflectionMap(garageRenderer);
         if (garageEnv) {
           garageScene.environment = garageEnv;
         }
@@ -3960,7 +4087,10 @@
         garageTurntable.remove(ch);
       }
     }
-    const model = buildFullMotorcycleMesh(garageLiveryId);
+    const model =
+      window.BendskinRealism3D && typeof window.BendskinRealism3D.buildRealGarageMotorcycle === 'function'
+        ? window.BendskinRealism3D.buildRealGarageMotorcycle(getBikeLivery(garageLiveryId))
+        : buildFullMotorcycleMesh(garageLiveryId);
     model.userData.isShowroomBike = true;
     garageTurntable.add(model);
   }

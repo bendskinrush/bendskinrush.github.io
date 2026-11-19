@@ -26,6 +26,7 @@
   <script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-4032050439057511"
        crossorigin="anonymous"></script>
   <script src="vendor/three.min.js" defer></script>
+  <script src="realism3d.js" defer></script>
   <script src="ultra3d.js" defer></script>
   <script src="game.js" defer></script>
 </head>
@@ -239,7 +240,7 @@
             <div class="hud-badges">
               <span id="hud-speed" class="hud-mini-badge speed-badge">60 km/h</span>
               <span id="hud-gear-badge" class="hud-mini-badge gear-badge">G1</span>
-              <span id="hud-quality-badge" class="hud-mini-badge quality-badge">ULTRA 1080p</span>
+              <span id="hud-quality-badge" class="hud-mini-badge quality-badge">ULTRA REAL</span>
               <span id="hud-fps" class="hud-mini-badge fps-badge">60 FPS</span>
               <button id="btn-hud-tilt" class="hud-mini-badge tilt-badge" type="button" title="Toggle or Recenter Phone Tilt Steering">
                 <svg class="game-svg-icon icon-sm"><use href="#icon-tilt"></use></svg>
@@ -737,24 +738,24 @@
             <div class="settings-group">
               <div class="settings-label-row">
                 <span class="settings-label">Graphics Quality</span>
-                <span class="settings-badge">1080p PBR 3D</span>
+                <span class="settings-badge">Photoreal 1080p+</span>
               </div>
               <div class="quality-grid" role="group" aria-label="Graphics Quality">
                 <button id="btn-quality-low" class="seg-btn" type="button" data-quality="low">
-                  Low
+                  Low 3D
                 </button>
                 <button id="btn-quality-normal" class="seg-btn" type="button" data-quality="normal">
-                  Medium
+                  Medium 720p+
                 </button>
                 <button id="btn-quality-high" class="seg-btn" type="button" data-quality="high">
-                  High 720p+
+                  High 1080p
                 </button>
                 <button id="btn-quality-ultra" class="seg-btn active" type="button" data-quality="ultra">
-                  Ultra HD 1080p
+                  Ultra Real 1080p+
                 </button>
               </div>
               <p id="graphics-quality-desc" class="settings-hint">
-                Ultra HD 1080p active: full 1080p supersampled render scale, MSAA anti-aliasing, max anisotropic PBR textures, sky reflections &amp; sculpted realistic cars, buildings &amp; trees.
+                Ultra Real 1080p+ active: photorealistic normal-mapped asphalt, sidewalks, guardrails &amp; gantries, real motorcycle cockpit + anatomical human hands/watch, real cars with drivers &amp; interiors, real rival riders &amp; roadside pedestrians.
               </p>
             </div>
 
@@ -958,7 +959,7 @@
                 <li><strong>Mobile Car Pedals &amp; Left/Right-Handed Swap:</strong> Use <code>&lt; / &gt;</code> steering arrows or swipe (switch <em>Left-Handed / Right-Handed</em> in Settings to swap steering arrows and the car-style <strong>GAS / BRAKE</strong> foot pedals between Left and Right).</li>
                 <li><strong>Vehicle Turn Signals:</strong> Watch every car, van, truck, and rival bike flash its amber turn-signal indicator before changing lanes so you can react cleanly at high speed.</li>
                 <li><strong>Per-Account Coins &amp; Full-Bike Garage:</strong> Collect spinning Gold Coins (<code>+10</code>) and Sharp Dodges (<code>+1</code>) stored privately per account. Open <strong>Garage</strong> to inspect every motorcycle in full rotatable 3D!</li>
-                <li><strong>1080p Graphics Ladder:</strong> Choose <em>Low</em> (2.5D extruded), <em>Medium</em> (3D WebGL), <em>High 720p+</em> (supersampled 720p+ 3D cockpit), or <em>Ultra HD 1080p</em> (1080p supersampling, anti-aliasing, max anisotropic PBR textures, sky reflections &amp; realistic non-boxy cars, buildings &amp; trees) in Settings.</li>
+                <li><strong>Photorealistic 3D Graphics Ladder:</strong> Choose <em>Low 3D</em> (real-time WebGL 3D), <em>Medium 720p+</em> (supersampled 720p+ 3D cockpit), <em>High 1080p</em> (1080p PBR textures, 16x AF &amp; sculpted meshes), or <em>Ultra Real 1080p+</em> (true normal-mapped asphalt, sidewalks, guardrails &amp; overhead gantries, real sculpted bike cockpit + anatomical human rider hands &amp; watch, real cars with drivers &amp; interiors, real rival riders &amp; roadside pedestrians) in Settings.</li>
               </ul>
             </article>
 
